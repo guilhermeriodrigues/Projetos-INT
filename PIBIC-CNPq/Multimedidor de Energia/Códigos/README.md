@@ -1,0 +1,1 @@
+Nesta pasta, os códigos em .ino são adicionados, bem como também as bibliotecas relacionadas. Geralmente, as bibliotecas são adicionadas com outros arquivos como exemplos, por isto se encontrarão em .ZIP.
