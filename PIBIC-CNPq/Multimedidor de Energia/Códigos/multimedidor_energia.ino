@@ -28,7 +28,7 @@ ModbusIP mb; //Instância do objeto Modbus
 void setup(){  
 
   byte mac[] = {0x01, 0x23, 0xBE, 0xFE, 0xAF, 0xA5}; //Definição do endereço MAC
-  byte ip[] = {192,168,1,173} //Definição do endereço IP
+  byte ip[] = {192,168,1,173}; //Definição do endereço IP
   mb.config(mac,ip); //Configurando o Modbus IP
 
   //Atribuição de Input Register
@@ -38,7 +38,7 @@ void setup(){
   //Atribuição de Input Status
   mb.addIsts(sensor3);
   
-  serial.begin(9600); //Define-se a taxa de 9600 bits por segundo
+  Serial.begin(9600); //Define-se a taxa de 9600 bits por segundo
   teste.voltage(PIN_TENS, CAL1, 1.7); //São os parâmetros: (PINO ANALÓGIO, VALOR DE CALIBRAÇÃO, MUDANÇA DE FASE)
   teste.current(PIN_CORR, CAL2); //São os parâmetros: (PINO ANALÓGIO, VALOR DE CALIBRAÇÃO)
   sonda.begin(); //Inicializa a sonda ao ligar o Arduino
