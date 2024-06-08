@@ -1,57 +1,60 @@
-#include <Modbus.h>
-#include <ModbusSerial.h>
-#include <DHT.h>
+#include "dht.h"
 
-// Instância do objeto DHT11
+const int pinoDHT11 = A1;
+const int pinoLDR = A0;
 
-  DHT dht(A1, DHT11);
+dht DHT;
 
-// Instância do objeto Modbus Serial
+// Ajuste esses coeficientes conforme a calibração correta
+float slope = 1.0; // Inclinação da curva de calibração
+float intercept = 0; // Intercepto da curva de calibração
+float tempCoefficient = 0.01; // Coeficiente de ajuste para temperatura
+float humidityCoefficient = 0.005; // Coeficiente de ajuste para umidade
 
-  ModbusSerial mb;
-
-// Declaração de variáveis 
-
-  long ts;
-  const int var_umid= 1;
-  const int var_temp = 2;
-  
-// Definição dos offsets (0-9999)
-
-void setup(){
-
-  mb.config(&Serial, 9600, SERIAL_8N1);
-
-// Serial 8N1 - 8 bits de pacote, sem paridade e bits de stop de tamanho unitário
-// Configuração do Modbus RTU com taxa de trasmissão de 9600 bits por segundo.
-
-  mb.setSlaveId(1);
-
-// Definição de um ID de 1 até 247 para o datasource
-
-  mb.addIreg(var_temp);
-  mb.addIreg(var_umid);
-
-
-// Inicialização da contagem do tempo e do DHT11 
-
-    dht.begin();
-    ts = millis();
-
+void setup() {
+  Serial.begin(9600);
 }
 
-void loop(){
-  
-// Método utilizado para leitura do Modbus a cada loop
+void loop() {
+  int valorLDR = analogRead(pinoLDR);
+  float tensao = valorLDR * (5.0 / 1024.0);
+  float irradiacaoBase = calculateIrradiance(valorLDR); // Nova função de cálculo da irradiância base
 
-  mb.task();
+  DHT.read11(pinoDHT11);
+  float temperatura = DHT.temperature;
+  float umidade = DHT.humidity;
 
-// Lê o valor analógico da temperatura e armazena na variável criada a cada 1 segundo
+  float irradiacaoAjustada = adjustIrradiance(irradiacaoBase, temperatura, umidade);
 
- if (millis() > ts + 1000) {
-  mb.Ireg(var_temp, dht.readTemperature());
-  mb.Ireg(var_umid, dht.readHumidity());
-  ts = millis();
- }
+  Serial.print("Valor LDR: ");
+  Serial.print(valorLDR);
+  Serial.print(" / Irradiação solar: ");
+  Serial.print(irradiacaoAjustada);
+  Serial.print(" W/m²");
+  Serial.print(" / Umidade: ");
+  Serial.print(umidade);
+  Serial.print("%");
+  Serial.print(" / Temperatura: ");
+  Serial.print(temperatura, 0);
+  Serial.println("°C");
 
+  delay(2000);
 }
+
+float calculateIrradiance(int valorLDR) {
+  // Ajuste a fórmula com base em dados de calibração reais
+  // Exemplo de fórmula linear básica, ajuste conforme necessário
+  float irradiancia = (1023.0 - valorLDR) * (1000.0 / (1023.0 - 50.0)); // Fórmula original
+  // float irradiancia = 2976.6 * exp(-17.73 * (valorLDR * (5.0 / 1024.0))); // Outra fórmula possível
+
+  // Esta fórmula deve ser ajustada para refletir os dados de calibração reais
+  // Por exemplo, se a relação for linear ou exponencial, ajuste os coeficientes
+  return irradiancia;
+}
+
+float adjustIrradiance(float irradiancia, float temperatura, float umidade) {
+  // Ajuste da irradiância com base na temperatura e umidade
+  float irradiacaoAjustada = irradiancia - (tempCoefficient * (temperatura - 25)) - (humidityCoefficient * umidade);
+  return irradiacaoAjustada;
+}
+
