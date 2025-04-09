@@ -19,7 +19,7 @@ CREATE TABLE Contrato (
     id_contrato INT AUTO_INCREMENT PRIMARY KEY,
     id_empresa INT,
     data_contrato DATE NOT NULL,
-    prazo INT,                -- Prazo do serviço (ex: em dias)
+    prazo INT,                
     valor_servico DECIMAL(10,2),
     data_contato DATE,
     FOREIGN KEY (id_empresa) REFERENCES Empresa(id_empresa)
