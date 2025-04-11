@@ -1,59 +1,52 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from PIL import Image, ImageTk, ImageSequence
+import mysql.connector
+from mysql.connector import Error
+from datetime import datetime
 
-#Converti as classes para frames, para integrar o design 
-#Tirei do top level e coloquei em content_frame para ficar melhor a organizção e ficar mais interativo
-#Criei uma estrutura com duas áreas principais:
-#Um nav_frame que é a área de navegação (o menu lateral) e com todos os votões para acessar as funcionalidades 
-#E em segundo o content_frame, que é a área de conteúdo onde as telas para funcionalidades serão carregadas 
-#Troquei para o gerenciador grid ao invés do pack para termos um maior controle no alinhamento dos widgets
-#Defini o padding para um espaçamento melhor e que esteja melhor visualmente 
-#Coloquei o ttk.Style pra ficar mais moderno, definindo estilos para o TFrame, TLabel e TButton
-#Coloquei cores de fundo também 
+db_config = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'sua_senha',
+    'database': 'ensaios_capacetes'
+}
 
-#Coloquei cada funcionalidade de uma janelça separada do tk.TopLevel para uma classe derivada de ttk.Frame, que permite que todos os conteúdos sejam carregados de forma dinâmica no content_frame da MainApp
-#Todas as funções agora tem botão "Voltar"
-#Usei o método show_main_menu() da classe MainApp
-#Coloquei no nav_frame botões que, quando apertados, vão chamar o método load_content, assim carregando a funcionalidade correspondente ao content_frame 
-
-#Agora a MainApp irá ter uma interface dividida em duas colunas: Uma pra navegação e outra pro conteúdo 
-#Em uso o método do columfigure() e o rowconfigure() para tornar a área de conteúdo responsiva
-#Método createnavigation() para definir o menu lateral, com botoes que chamam métodos para carregar as telas
-#Usados agora também métodos de limpeza como o clear_content() para remover todos os widgets do content_frame antes de carregar uma nova tela
-#E também o load_content: Irá instanciar a classe de conteúdo (passada como parametro) dentro do content_frame 
-#O show_main_menu que exibe uma tela inicial ou uma mensagem de  oas vindas 
-#Coloquei um fundo uniforme e alguns estilos personalizados pra todos os widgets via o Ttk.Style 
-
-#Mudança nas classes de funcionalidades:
-
-#Atualizei pra utilizar grid pra organizar os widgets
-#BOtão "aplicar" em SensorCorrection, botão "Salvar" emç FrictionSetting e em testsetup e testregistration foram colocados mais espaçamentom
-#Em senosr monitor, foi usado novamente o grid, como em todas as classses, e um LabelFrame 
-#Implementei a exibição de um GIF animado
-
-
-#Fim das atualizações de design do dia 27/03
-
+def inserir_acelerometro(acel_x, acel_y, acel_z):
+    """
+    Insere os dados dos acelerômetros na tabela AcelerometroImpacto
+    (no nosso modelo, estes dados estarão na tabela unificada com o ensaio de impacto).
+    """
+    try:
+        conexao = mysql.connector.connect(**db_config)
+        cursor = conexao.cursor()
+        sql = """INSERT INTO AcelerometroImpacto (acel_x, acel_y, acel_z, tempo_amostra)
+                 VALUES (%s, %s, %s, %s)"""
+    
+        tempo_amostra = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        valores = (acel_x, acel_y, acel_z, tempo_amostra)
+        cursor.execute(sql, valores)
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+        messagebox.showinfo("Sucesso", "Dados de acelerômetro salvos com sucesso!")
+    except Error as e:
+        messagebox.showerror("Erro no Banco", f"Erro ao inserir dados: {e}")
 
 
 class ElevatorAdjustment(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        # Organizei o frame com o padding e o grid para ficar num layout melhor 
+    def _init_(self, master):
+        super()._init_(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         self.step = 1
         self.position = tk.IntVar(value=0)
         
-        # Este é  o título da funcionalidade
         ttk.Label(self, text="Ajuste Fino do Elevador", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         ttk.Label(self, text="Posição (mm):").grid(row=1, column=0, sticky="w")
         ttk.Label(self, textvariable=self.position).grid(row=1, column=1, sticky="w")
         
         ttk.Button(self, text="+1mm", command=self.increment).grid(row=2, column=0, padx=5, pady=5)
         ttk.Button(self, text="-1mm", command=self.decrement).grid(row=2, column=1, padx=5, pady=5)
-        
-        # Este é o botão de voltar que adicionei para retornar ao menu principal
         ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=3, column=0, columnspan=2, pady=10)
     
     def increment(self):
@@ -63,8 +56,8 @@ class ElevatorAdjustment(ttk.Frame):
         self.position.set(self.position.get() - self.step)
 
 class FrictionSetting(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
+    def _init_(self, master):
+        super()._init_(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Configuração do Atrito", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         
@@ -75,8 +68,8 @@ class FrictionSetting(ttk.Frame):
         ttk.Button(self, text="Salvar", command=self.master.master.show_main_menu).grid(row=2, column=0, columnspan=2, pady=10)
 
 class SensorCorrection(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
+    def _init_(self, master):
+        super()._init_(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Correção dos Acelerômetros", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         
@@ -94,8 +87,8 @@ class SensorCorrection(ttk.Frame):
         ttk.Button(self, text="Aplicar", command=self.master.master.show_main_menu).grid(row=4, column=0, columnspan=2, pady=10)
 
 class TestSetup(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
+    def _init_(self, master):
+        super()._init_(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Configuração do Teste", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         
@@ -105,12 +98,11 @@ class TestSetup(ttk.Frame):
         ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=3, column=0, columnspan=2, pady=10)
     
     def next_step(self):
-        # Isto irá carregar para a próxima etapa, que é a test registration
         self.master.master.load_content(TestRegistration)
 
 class TestRegistration(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
+    def _init_(self, master):
+        super()._init_(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Registro dos Dados", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         self.fields = ["Empresa", "Modelo do Capacete", "Número da Amostra", "Número do Procedimento/Relatório", 
@@ -127,8 +119,8 @@ class TestRegistration(ttk.Frame):
         ttk.Button(self, text="Salvar", command=self.master.master.show_main_menu).grid(row=row, column=0, columnspan=2, pady=10)
 
 class SensorMonitor(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
+    def _init_(self, master):
+        super()._init_(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Monitoramento de Sensores", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         
@@ -142,12 +134,12 @@ class SensorMonitor(ttk.Frame):
         ttk.Label(self, text="Canal X (g):").grid(row=3, column=0, sticky="w")
         ttk.Label(self, textvariable=self.accel_g).grid(row=3, column=1, sticky="w")
         
-        # Esta é a área parea exibição do GIF
+        
         self.image_label = ttk.Label(self)
         self.image_label.grid(row=4, column=0, columnspan=2, pady=10)
         self.display_gif("led_binary.gif")
         
-        # Controles para sensores organizados em Label Frame
+       
         sensor_frame = ttk.LabelFrame(self, text="Sensores")
         sensor_frame.grid(row=5, column=0, columnspan=2, pady=10, sticky="ew")
         self.sensor_vars = {}
@@ -164,7 +156,8 @@ class SensorMonitor(ttk.Frame):
                 col = 0
                 row += 1
         
-        ttk.Button(self, text="Iniciar Teste", command=self.start_test).grid(row=6, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(self, text="Iniciar Teste", command=self.iniciar_teste).grid(row=6, column=0, columnspan=2, pady=10)
         ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=7, column=0, columnspan=2, pady=10)
     
     def display_gif(self, filepath):
@@ -181,30 +174,92 @@ class SensorMonitor(ttk.Frame):
         self.index = (self.index + 1) % len(self.frames)
         self.after(100, self.animate)
     
-    def start_test(self):
-        # Irá carregar a configuração para o teste (TestSetup)
-
+    def iniciar_teste(self):
+        
+        try:
+            acel_x = float(self.accel_mv.get())
+            acel_y = float(self.accel_g.get())  
+            acel_z = 0.0  
+        except ValueError:
+            messagebox.showerror("Erro", "Insira valores numéricos válidos para os sensores.")
+            return
+        
+        
+        inserir_acelerometro(acel_x, acel_y, acel_z)
+        
+       
         self.master.master.load_content(TestSetup)
 
+#
 
-# Esta é a classe principal, mas com uma nova estrutura de navegação e uma área de conteúdo
+class AboutFrame(ttk.Frame):
+    def _init_(self, master):
+        super()._init_(master)
+        self.grid(sticky="nsew", padx=20, pady=20)
+        ttk.Label(self, text="Sobre", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, pady=(0,10))
+        ttk.Label(self, text="Software de Ensaio de Capacete\nVersão 1.0\n© 2025 Sua Empresa").grid(row=1, column=0, pady=10)
+        ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=2, column=0, pady=10)
+
+class EmpresaFrame(ttk.Frame):
+    def _init_(self, master):
+        super()._init_(master)
+        self.grid(sticky="nsew", padx=20, pady=20)
+        ttk.Label(self, text="Dados da Empresa", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
+        ttk.Label(self, text="Nome:").grid(row=1, column=0, sticky="w")
+        self.entry_nome = ttk.Entry(self)
+        self.entry_nome.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="Cidade:").grid(row=2, column=0, sticky="w")
+        self.entry_cidade = ttk.Entry(self)
+        self.entry_cidade.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="País:").grid(row=3, column=0, sticky="w")
+        self.entry_pais = ttk.Entry(self)
+        self.entry_pais.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="Estado:").grid(row=4, column=0, sticky="w")
+        self.entry_estado = ttk.Entry(self)
+        self.entry_estado.grid(row=4, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="CNPJ:").grid(row=5, column=0, sticky="w")
+        self.entry_cnpj = ttk.Entry(self)
+        self.entry_cnpj.grid(row=5, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="Telefone:").grid(row=6, column=0, sticky="w")
+        self.entry_telefone = ttk.Entry(self)
+        self.entry_telefone.grid(row=6, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="Email:").grid(row=7, column=0, sticky="w")
+        self.entry_email = ttk.Entry(self)
+        self.entry_email.grid(row=7, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Button(self, text="Salvar", command=self.master.master.show_main_menu).grid(row=8, column=0, columnspan=2, pady=10)
+
+class CapacetesFrame(ttk.Frame):
+    def _init_(self, master):
+        super()._init_(master)
+        self.grid(sticky="nsew", padx=20, pady=20)
+        ttk.Label(self, text="Cadastro de Capacetes", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
+        ttk.Label(self, text="Modelo:").grid(row=1, column=0, sticky="w")
+        self.entry_modelo = ttk.Entry(self)
+        self.entry_modelo.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="Fabricante:").grid(row=2, column=0, sticky="w")
+        self.entry_fabricante = ttk.Entry(self)
+        self.entry_fabricante.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(self, text="Tamanho:").grid(row=3, column=0, sticky="w")
+        self.entry_tamanho = ttk.Entry(self)
+        self.entry_tamanho.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Button(self, text="Salvar", command=self.master.master.show_main_menu).grid(row=4, column=0, columnspan=2, pady=10)
+
 
 
 class MainApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
+    def _init_(self):
+        super()._init_()
         self.title("Software de Ensaio de Capacete")
         self.geometry("800x600")
         self.configure(bg="#f0f0f0")
         
-        # Isso configura o estilo
         self.style = ttk.Style(self)
         self.style.theme_use("clam")
         self.style.configure("TFrame", background="#f0f0f0")
         self.style.configure("TLabel", background="#f0f0f0", font=("Helvetica", 10))
         self.style.configure("TButton", font=("Helvetica", 10))
         
-        # Criei a área para navegação e conteúdo 
+        # Área de navegação e conteúdo
         self.nav_frame = ttk.Frame(self, width=200, padding=10)
         self.nav_frame.grid(row=0, column=0, sticky="ns")
         self.content_frame = ttk.Frame(self, padding=10)
@@ -219,10 +274,15 @@ class MainApp(tk.Tk):
     def create_navigation(self):
         ttk.Label(self.nav_frame, text="Menu", font=("Helvetica", 12, "bold")).grid(row=0, column=0, pady=10)
         nav_buttons = [
-            ("Ajuste Fino do Elevador", lambda: self.load_content(ElevatorAdjustment)),
+            ("Ajuste do Elevador", lambda: self.load_content(ElevatorAdjustment)),
             ("Configurar Atrito", lambda: self.load_content(FrictionSetting)),
-            ("Monitoramento de Sensores", lambda: self.load_content(SensorMonitor)),
+            ("Monitorar Sensores", lambda: self.load_content(SensorMonitor)),
             ("Correção dos Acelerômetros", lambda: self.load_content(SensorCorrection)),
+            ("Registro de Dados", lambda: self.load_content(TestRegistration)),
+            ("Configuração do Teste", lambda: self.load_content(TestSetup)),
+            ("Sobre", lambda: self.load_content(AboutFrame)),
+            ("Empresa", lambda: self.load_content(EmpresaFrame)),
+            ("Capacetes", lambda: self.load_content(CapacetesFrame))
         ]
         for idx, (text, command) in enumerate(nav_buttons, start=1):
             ttk.Button(self.nav_frame, text=text, command=command).grid(row=idx, column=0, pady=5, sticky="ew")
@@ -233,15 +293,13 @@ class MainApp(tk.Tk):
     
     def load_content(self, content_class):
         self.clear_content()
-        # Vai instanciar a classe de conteúdo no content_frame
         content_class(self.content_frame)
     
     def show_main_menu(self):
         self.clear_content()
-        # Exibirá a mensagem de boas vindas no menu principal 
         welcome = ttk.Label(self.content_frame, text="Bem-vindo ao Software de Ensaio de Capacete", font=("Helvetica", 14))
         welcome.pack(expand=True)
 
-if __name__ == "__main__":
+if __name__ == "_main_":
     app = MainApp()
     app.mainloop()
