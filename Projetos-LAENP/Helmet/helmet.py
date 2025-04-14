@@ -109,9 +109,7 @@ def inserir_saidaDigital(ensaio_id, canal, valor, tempo_ativacao):
         messagebox.showerror("Erro no Banco", f"Erro ao salvar saída digital: {e}")
 
 
-# ===========================#
-# Interfaces (Frames) de Funcionalidade
-# ===========================#
+
 
 class ElevatorAdjustment(ttk.Frame):
     def __init__(self, master):
@@ -334,7 +332,7 @@ class CapacetesFrame(ttk.Frame):
         messagebox.showinfo("Informação", "Capacete salvo (função a ser implementada).")
         self.master.master.show_main_menu()
 
-# Novas telas para entidades adicionais
+
 
 class ContratoFrame(ttk.Frame):
     def __init__(self, master):
@@ -429,9 +427,6 @@ class SaidaDigitalFrame(ttk.Frame):
         self.master.master.show_main_menu()
 
 
-# ===========================#
-# Classe Principal: MainApp
-# ===========================#
 
 class MainApp(tk.Tk):
     def __init__(self):
