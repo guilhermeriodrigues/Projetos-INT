@@ -18,7 +18,7 @@ db_config = {
 def inserir_acelerometro(acel_x, acel_y, acel_z):
     """
     Insere os dados dos acelerômetros na tabela AcelerometroImpacto
-    (Nesta versão, fundimos os dados dos acelerômetros na tabela EnsaioImpacto).
+    (Nesta versão, fundi os dados dos acelerômetros na tabela EnsaioImpacto).
     """
     try:
         conexao = mysql.connector.connect(**db_config)
