@@ -1,40 +1,95 @@
+
+print("Iniciando programa...")
 import tkinter as tk
 from tkinter import ttk, messagebox
+print ("Tkinter importado")
 from PIL import Image, ImageTk, ImageSequence
+print("Pillow importado")
 import mysql.connector
 from mysql.connector import Error
+print ("mysql connector importado")
 from datetime import datetime
+import threading 
+print("Importado o datetime")
+print("Inicializando programa")
 
-# Configurações do banco de dados MySQL
+# Configurações do banco de dados MySQL – preencha com seus dados reais
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': '30746170',
-    'database': 'ensaios_capacete'
+    'password': 'sua_senha',
+    'database': 'ensaios_capacete',
+    'auth_plugin': 'mysql_native_password'
 }
 
-# Funções de inserção no banco de dados
+# ============================
+# Funções de Inserção no Banco de Dados
+# ============================
 
-def inserir_acelerometro(acel_x, acel_y, acel_z):
+def inserir_ensaio():
     """
-    Insere os dados dos acelerômetros na tabela AcelerometroImpacto
-    (Nesta versão, fundi os dados dos acelerômetros na tabela EnsaioImpacto).
+    Insere um registro na tabela Ensaio.
+    Neste exemplo, os campos id_contrato e id_capacete são definidos como NULL.
+    Retorna o id_ensaio recém-criado.
     """
     try:
         conexao = mysql.connector.connect(**db_config)
         cursor = conexao.cursor()
+        sql = "INSERT INTO Ensaio (id_contrato, id_capacete) VALUES (NULL, NULL)"
+        cursor.execute(sql)
+        conexao.commit()
+        ensaio_id = cursor.lastrowid
+        cursor.close()
+        conexao.close()
+        return ensaio_id
+    except Error as e:
+        messagebox.showerror("Erro", f"Erro ao inserir ensaio: {e}")
+        return None
+
+def inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada):
+    """
+    Insere os dados específicos do ensaio de impacto na tabela EnsaioImpacto.
+    Outros campos (como temperatura, umidade, atrito, acelerômetro, etc.) ficam como NULL para serem atualizados depois.
+    """
+    try:
+        conexao = mysql.connector.connect(**db_config)
+        cursor = conexao.cursor()
+        sql = """INSERT INTO EnsaioImpacto 
+                 (id_ensaio, num_amostra, num_procedimento, posicao_teste, condicionamento, standard_utilizado, temperatura, umidade, valor_atrito, norma, acel_x, acel_y, acel_z, tempo_amostra, notas)
+                 VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, %s, NULL, NULL, NULL, NULL, NULL)"""
+        # Usamos 'standard_utilizado' e 'norma' com o mesmo valor passado para simplificar
+        valores = (ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada, norma_utilizada)
+        cursor.execute(sql, valores)
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+        return True
+    except Error as e:
+        messagebox.showerror("Erro", f"Erro ao inserir ensaio de impacto: {e}")
+        return False
+
+def inserir_acelerometro(acel_x, acel_y, acel_z):
+    """
+    Atualiza os dados dos acelerômetros no último registro de EnsaioImpacto.
+    Essa função assume que um ensaio já foi criado e que o último EnsaioImpacto corresponde ao ensaio atual.
+    """
+    try:
+        conexao = mysql.connector.connect(**db_config)
+        cursor = conexao.cursor()
+        tempo_amostra = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         sql = """UPDATE EnsaioImpacto 
                  SET acel_x = %s, acel_y = %s, acel_z = %s, tempo_amostra = %s 
                  WHERE id_ensaio = (SELECT MAX(id_ensaio) FROM Ensaio)"""
-        tempo_amostra = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         valores = (acel_x, acel_y, acel_z, tempo_amostra)
         cursor.execute(sql, valores)
         conexao.commit()
         cursor.close()
         conexao.close()
         messagebox.showinfo("Sucesso", "Dados dos acelerômetros salvos com sucesso!")
+        app.set_status("Dados dos acelerômetros salvos com sucesso!")
     except Error as e:
         messagebox.showerror("Erro no Banco", f"Erro ao inserir dados dos acelerômetros: {e}")
+        app.set_status(f"Erro: {e}")
 
 def inserir_empresa(nome, cidade, pais, estado, cnpj, telefone, email):
     """
@@ -51,8 +106,10 @@ def inserir_empresa(nome, cidade, pais, estado, cnpj, telefone, email):
         cursor.close()
         conexao.close()
         messagebox.showinfo("Sucesso", "Empresa cadastrada com sucesso!")
+        app.set_status("Empresa cadastrada com sucesso!")
     except Error as e:
         messagebox.showerror("Erro no Banco", f"Erro ao cadastrar empresa: {e}")
+        app.set_status(f"Erro: {e}")
 
 def inserir_contrato(id_empresa, data_contrato, prazo, valor_servico, data_contato):
     """
@@ -69,8 +126,10 @@ def inserir_contrato(id_empresa, data_contrato, prazo, valor_servico, data_conta
         cursor.close()
         conexao.close()
         messagebox.showinfo("Sucesso", "Contrato cadastrado com sucesso!")
+        app.set_status("Contrato cadastrado com sucesso!")
     except Error as e:
         messagebox.showerror("Erro no Banco", f"Erro ao cadastrar contrato: {e}")
+        app.set_status(f"Erro: {e}")
 
 def inserir_relatorio(ensaio_id, texto_relatorio):
     """
@@ -87,8 +146,10 @@ def inserir_relatorio(ensaio_id, texto_relatorio):
         cursor.close()
         conexao.close()
         messagebox.showinfo("Sucesso", "Relatório salvo com sucesso!")
+        app.set_status("Relatório salvo com sucesso!")
     except Error as e:
         messagebox.showerror("Erro no Banco", f"Erro ao salvar relatório: {e}")
+        app.set_status(f"Erro: {e}")
 
 def inserir_saidaDigital(ensaio_id, canal, valor, tempo_ativacao):
     """
@@ -105,11 +166,14 @@ def inserir_saidaDigital(ensaio_id, canal, valor, tempo_ativacao):
         cursor.close()
         conexao.close()
         messagebox.showinfo("Sucesso", "Saída digital cadastrada!")
+        app.set_status("Saída digital cadastrada!")
     except Error as e:
         messagebox.showerror("Erro no Banco", f"Erro ao salvar saída digital: {e}")
+        app.set_status(f"Erro: {e}")
 
-
-
+# ============================
+# Interfaces (Frames) de Funcionalidade
+# ============================
 
 class ElevatorAdjustment(ttk.Frame):
     def __init__(self, master):
@@ -117,11 +181,9 @@ class ElevatorAdjustment(ttk.Frame):
         self.grid(sticky="nsew", padx=20, pady=20)
         self.step = 1
         self.position = tk.IntVar(value=0)
-        
         ttk.Label(self, text="Ajuste Fino do Elevador", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         ttk.Label(self, text="Posição (mm):").grid(row=1, column=0, sticky="w")
         ttk.Label(self, textvariable=self.position).grid(row=1, column=1, sticky="w")
-        
         ttk.Button(self, text="+1mm", command=self.increment).grid(row=2, column=0, padx=5, pady=5)
         ttk.Button(self, text="-1mm", command=self.decrement).grid(row=2, column=1, padx=5, pady=5)
         ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=3, column=0, columnspan=2, pady=10)
@@ -176,9 +238,8 @@ class TestRegistration(ttk.Frame):
         super().__init__(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Registro dos Dados", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        # Campos que serão persistidos na tabela EnsaioImpacto
-        self.fields = ["Empresa", "Modelo do Capacete", "Número da Amostra", "Número do Procedimento/Relatório", 
-                       "Posição do Ensaio", "Condicionamento", "Norma Utilizada"]
+        # Campos para dados de ensaio de impacto (com informações essenciais)
+        self.fields = ["Número da Amostra", "Número do Procedimento/Relatório", "Posição do Ensaio", "Condicionamento", "Norma Utilizada"]
         self.entries = {}
         row = 1
         for field in self.fields:
@@ -187,7 +248,24 @@ class TestRegistration(ttk.Frame):
             entry.grid(row=row, column=1, sticky="ew", pady=2)
             self.entries[field] = entry
             row += 1
-        ttk.Button(self, text="Salvar", command=self.master.master.show_main_menu).grid(row=row, column=0, columnspan=2, pady=10)
+        
+        # Ao salvar, cria um Ensaio e um registro correspondente em EnsaioImpacto
+        ttk.Button(self, text="Salvar Ensaio", command=self.salvar_ensaio).grid(row=row, column=0, columnspan=2, pady=10)
+    
+    def salvar_ensaio(self):
+        # Recupera os dados do formulário
+        num_amostra = self.entries["Número da Amostra"].get()
+        num_procedimento = self.entries["Número do Procedimento/Relatório"].get()
+        posicao_teste = self.entries["Posição do Ensaio"].get()
+        condicionamento = self.entries["Condicionamento"].get()
+        norma_utilizada = self.entries["Norma Utilizada"].get()
+        
+        # Cria um novo Ensaio geral e, em seguida, um registro na especialização EnsaioImpacto
+        ensaio_id = inserir_ensaio()
+        if ensaio_id is not None:
+            if inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada):
+                messagebox.showinfo("Sucesso", "Ensaio registrado com sucesso!")
+                self.master.master.show_main_menu()
 
 class SensorMonitor(ttk.Frame):
     def __init__(self, master):
@@ -195,7 +273,6 @@ class SensorMonitor(ttk.Frame):
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Monitoramento de Sensores", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         
-        # Entradas para aceleração (mV/g) dos três eixos
         ttk.Label(self, text="Aceleração X (mV/g):").grid(row=1, column=0, sticky="w")
         self.entry_acel_x = ttk.Entry(self, width=10)
         self.entry_acel_x.grid(row=1, column=1, sticky="w")
@@ -208,12 +285,10 @@ class SensorMonitor(ttk.Frame):
         self.entry_acel_z = ttk.Entry(self, width=10)
         self.entry_acel_z.grid(row=3, column=1, sticky="w")
         
-        # Área para exibição do GIF animado
         self.image_label = ttk.Label(self)
         self.image_label.grid(row=4, column=0, columnspan=2, pady=10)
         self.display_gif("led_binary.gif")
         
-        # Área de sensores extras
         sensor_frame = ttk.LabelFrame(self, text="Sensores Extras")
         sensor_frame.grid(row=5, column=0, columnspan=2, pady=10, sticky="ew")
         self.sensor_vars = {}
@@ -257,8 +332,6 @@ class SensorMonitor(ttk.Frame):
             return
         inserir_acelerometro(acel_x, acel_y, acel_z)
         self.master.master.load_content(TestSetup)
-
-# Novas telas para dados que ainda não estão presentes na versão anterior
 
 class AboutFrame(ttk.Frame):
     def __init__(self, master):
@@ -327,12 +400,8 @@ class CapacetesFrame(ttk.Frame):
         ttk.Button(self, text="Salvar", command=self.salvar_capacete).grid(row=4, column=0, columnspan=2, pady=10)
     
     def salvar_capacete(self):
-        # Aqui você pode implementar a função de salvar o capacete no banco de dados,
-        # similar à função inserir_empresa(), se necessário. Por enquanto, apenas exibe uma mensagem.
         messagebox.showinfo("Informação", "Capacete salvo (função a ser implementada).")
         self.master.master.show_main_menu()
-
-
 
 class ContratoFrame(ttk.Frame):
     def __init__(self, master):
@@ -396,8 +465,8 @@ class RelatorioFrame(ttk.Frame):
         self.master.master.show_main_menu()
 
 class SaidaDigitalFrame(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
+    def _init_(self, master):
+        super()._init_(master)
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Cadastro de Saída Digital", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         ttk.Label(self, text="ID do Ensaio:").grid(row=1, column=0, sticky="w")
@@ -426,7 +495,55 @@ class SaidaDigitalFrame(ttk.Frame):
         inserir_saidaDigital(ensaio_id, canal, valor, tempo)
         self.master.master.show_main_menu()
 
+# ============================
+# Novas funções de fluxo de Ensaio
+# ============================
 
+def inserir_ensaio():
+    """
+    Insere um registro na tabela Ensaio com valores padrão para os FKs,
+    retornando o id_ensaio gerado.
+    """
+    try:
+        conexao = mysql.connector.connect(**db_config)
+        cursor = conexao.cursor()
+        # Supondo que os campos id_contrato e id_capacete permitam NULL
+        sql = "INSERT INTO Ensaio (id_contrato, id_capacete) VALUES (NULL, NULL)"
+        cursor.execute(sql)
+        conexao.commit()
+        ensaio_id = cursor.lastrowid
+        cursor.close()
+        conexao.close()
+        return ensaio_id
+    except Error as e:
+        messagebox.showerror("Erro", f"Erro ao inserir ensaio: {e}")
+        return None
+
+def inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada):
+    """
+    Insere os dados específicos do ensaio de impacto na tabela EnsaioImpacto.
+    Outros campos (temperatura, umidade, valor_atrito, dados de acelerômetro, notas)
+    ficam como NULL e podem ser atualizados posteriormente.
+    """
+    try:
+        conexao = mysql.connector.connect(**db_config)
+        cursor = conexao.cursor()
+        sql = """INSERT INTO EnsaioImpacto 
+                 (id_ensaio, num_amostra, num_procedimento, posicao_teste, condicionamento, standard_utilizado, temperatura, umidade, valor_atrito, norma, acel_x, acel_y, acel_z, tempo_amostra, notas)
+                 VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, %s, NULL, NULL, NULL, NULL, NULL)"""
+        valores = (ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada, norma_utilizada)
+        cursor.execute(sql, valores)
+        conexao.commit()
+        cursor.close()
+        conexao.close()
+        return True
+    except Error as e:
+        messagebox.showerror("Erro", f"Erro ao inserir ensaio de impacto: {e}")
+        return False
+
+# ============================
+# Classe Principal: MainApp com Status Bar
+# ============================
 
 class MainApp(tk.Tk):
     def __init__(self):
@@ -450,6 +567,10 @@ class MainApp(tk.Tk):
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
         
+        # Status Bar
+        self.status_bar = ttk.Label(self, text="Pronto", relief="sunken", anchor="w")
+        self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew")
+        
         self.create_navigation()
         self.show_main_menu()
     
@@ -460,7 +581,7 @@ class MainApp(tk.Tk):
             ("Configurar Atrito", lambda: self.load_content(FrictionSetting)),
             ("Monitorar Sensores", lambda: self.load_content(SensorMonitor)),
             ("Correção dos Acelerômetros", lambda: self.load_content(SensorCorrection)),
-            ("Registro de Dados", lambda: self.load_content(TestRegistration)),
+            ("Registro dos Dados", lambda: self.load_content(TestRegistration)),
             ("Configuração do Teste", lambda: self.load_content(TestSetup)),
             ("Empresa", lambda: self.load_content(EmpresaFrame)),
             ("Capacetes", lambda: self.load_content(CapacetesFrame)),
@@ -484,7 +605,12 @@ class MainApp(tk.Tk):
         self.clear_content()
         welcome = ttk.Label(self.content_frame, text="Bem-vindo ao Software de Ensaio de Capacete", font=("Helvetica", 14))
         welcome.pack(expand=True)
+    
+    def set_status(self, msg):
+        self.status_bar.config(text=msg)
 
 if __name__ == "__main__":
+    print("Chamando mainloop agora")
     app = MainApp()
     app.mainloop()
+    print ("fim do código")
