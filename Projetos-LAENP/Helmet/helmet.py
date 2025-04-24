@@ -1,549 +1,513 @@
-
-print("Iniciando programa...")
 import tkinter as tk
 from tkinter import ttk, messagebox
-print ("Tkinter importado")
 from PIL import Image, ImageTk, ImageSequence
-print("Pillow importado")
 import mysql.connector
 from mysql.connector import Error
-print ("mysql connector importado")
 from datetime import datetime
-import threading 
-print("Importado o datetime")
-print("Inicializando programa")
 
-# Configurações do banco de dados MySQL – preencha com seus dados reais
+# Configurações do banco de dados MySQL
 db_config = {
     'host': 'localhost',
     'user': 'root',
     'password': 'sua_senha',
-    'database': 'ensaios_capacete',
+    'database': 'ensaios_capacetes',
     'auth_plugin': 'mysql_native_password'
 }
 
-# ============================
-# Funções de Inserção no Banco de Dados
-# ============================
+# ----------------------------
+# Funções de Inserção no Banco
+# ----------------------------
 
 def inserir_ensaio():
-    """
-    Insere um registro na tabela Ensaio.
-    Neste exemplo, os campos id_contrato e id_capacete são definidos como NULL.
-    Retorna o id_ensaio recém-criado.
-    """
     try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        sql = "INSERT INTO Ensaio (id_contrato, id_capacete) VALUES (NULL, NULL)"
-        cursor.execute(sql)
-        conexao.commit()
-        ensaio_id = cursor.lastrowid
-        cursor.close()
-        conexao.close()
-        return ensaio_id
+        cnx = mysql.connector.connect(**db_config)
+        cur = cnx.cursor()
+        cur.execute("INSERT INTO Ensaio (id_contrato, id_capacete) VALUES (NULL, NULL)")
+        cnx.commit()
+        eid = cur.lastrowid
+        cur.close(); cnx.close()
+        return eid
     except Error as e:
         messagebox.showerror("Erro", f"Erro ao inserir ensaio: {e}")
         return None
 
-def inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada):
-    """
-    Insere os dados específicos do ensaio de impacto na tabela EnsaioImpacto.
-    Outros campos (como temperatura, umidade, atrito, acelerômetro, etc.) ficam como NULL para serem atualizados depois.
-    """
+def inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma):
     try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        sql = """INSERT INTO EnsaioImpacto 
-                 (id_ensaio, num_amostra, num_procedimento, posicao_teste, condicionamento, standard_utilizado, temperatura, umidade, valor_atrito, norma, acel_x, acel_y, acel_z, tempo_amostra, notas)
-                 VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, %s, NULL, NULL, NULL, NULL, NULL)"""
-        # Usamos 'standard_utilizado' e 'norma' com o mesmo valor passado para simplificar
-        valores = (ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada, norma_utilizada)
-        cursor.execute(sql, valores)
-        conexao.commit()
-        cursor.close()
-        conexao.close()
+        cnx = mysql.connector.connect(**db_config)
+        cur = cnx.cursor()
+        sql = """
+          INSERT INTO EnsaioImpacto 
+            (id_ensaio, num_amostra, num_procedimento, posicao_teste,
+             condicionamento, standard_utilizado, temperatura, umidade,
+             valor_atrito, norma, acel_x, acel_y, acel_z, tempo_amostra, notas)
+          VALUES (%s,%s,%s,%s,%s,%s,NULL,NULL,NULL,%s,NULL,NULL,NULL,NULL,NULL)
+        """
+        cur.execute(sql, (ensaio_id, num_amostra, num_procedimento,
+                          posicao_teste, condicionamento, norma, norma))
+        cnx.commit()
+        cur.close(); cnx.close()
         return True
     except Error as e:
         messagebox.showerror("Erro", f"Erro ao inserir ensaio de impacto: {e}")
         return False
 
-def inserir_acelerometro(acel_x, acel_y, acel_z):
-    """
-    Atualiza os dados dos acelerômetros no último registro de EnsaioImpacto.
-    Essa função assume que um ensaio já foi criado e que o último EnsaioImpacto corresponde ao ensaio atual.
-    """
+def inserir_acelerometro(acel_x, acel_y, acel_z, ensaio_id):
     try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        tempo_amostra = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        sql = """UPDATE EnsaioImpacto 
-                 SET acel_x = %s, acel_y = %s, acel_z = %s, tempo_amostra = %s 
-                 WHERE id_ensaio = (SELECT MAX(id_ensaio) FROM Ensaio)"""
-        valores = (acel_x, acel_y, acel_z, tempo_amostra)
-        cursor.execute(sql, valores)
-        conexao.commit()
-        cursor.close()
-        conexao.close()
-        messagebox.showinfo("Sucesso", "Dados dos acelerômetros salvos com sucesso!")
-        app.set_status("Dados dos acelerômetros salvos com sucesso!")
+        cnx = mysql.connector.connect(**db_config)
+        cur = cnx.cursor()
+        tempo = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        sql = """
+          UPDATE EnsaioImpacto
+            SET acel_x=%s, acel_y=%s, acel_z=%s, tempo_amostra=%s
+          WHERE id_ensaio=%s
+        """
+        cur.execute(sql, (acel_x, acel_y, acel_z, tempo, ensaio_id))
+        cnx.commit()
+        cur.close(); cnx.close()
+        messagebox.showinfo("Sucesso", "Acelerômetro salvo!")
     except Error as e:
-        messagebox.showerror("Erro no Banco", f"Erro ao inserir dados dos acelerômetros: {e}")
-        app.set_status(f"Erro: {e}")
+        messagebox.showerror("Erro", f"Erro ao salvar acelerômetro: {e}")
 
-def inserir_empresa(nome, cidade, pais, estado, cnpj, telefone, email):
-    """
-    Insere os dados da Empresa na tabela Empresa.
-    """
+def inserir_relatorio(ensaio_id, texto):
     try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        sql = """INSERT INTO Empresa (nome, cidade, pais, estado, cnpj, telefone, email)
-                 VALUES (%s, %s, %s, %s, %s, %s, %s)"""
-        valores = (nome, cidade, pais, estado, cnpj, telefone, email)
-        cursor.execute(sql, valores)
-        conexao.commit()
-        cursor.close()
-        conexao.close()
-        messagebox.showinfo("Sucesso", "Empresa cadastrada com sucesso!")
-        app.set_status("Empresa cadastrada com sucesso!")
+        cnx = mysql.connector.connect(**db_config)
+        cur = cnx.cursor()
+        cur.execute("INSERT INTO Relatorio(id_ensaio,texto_relatorio) VALUES (%s,%s)",
+                    (ensaio_id, texto))
+        cnx.commit()
+        cur.close(); cnx.close()
+        messagebox.showinfo("Sucesso", "Relatório salvo!")
     except Error as e:
-        messagebox.showerror("Erro no Banco", f"Erro ao cadastrar empresa: {e}")
-        app.set_status(f"Erro: {e}")
+        messagebox.showerror("Erro", f"Erro ao salvar relatório: {e}")
 
-def inserir_contrato(id_empresa, data_contrato, prazo, valor_servico, data_contato):
-    """
-    Insere os dados de Contrato na tabela Contrato.
-    """
+def inserir_empresa(nome, cidade, pais, estado, cnpj, tel, email):
     try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        sql = """INSERT INTO Contrato (id_empresa, data_contrato, prazo, valor_servico, data_contato)
-                 VALUES (%s, %s, %s, %s, %s)"""
-        valores = (id_empresa, data_contrato, prazo, valor_servico, data_contato)
-        cursor.execute(sql, valores)
-        conexao.commit()
-        cursor.close()
-        conexao.close()
-        messagebox.showinfo("Sucesso", "Contrato cadastrado com sucesso!")
-        app.set_status("Contrato cadastrado com sucesso!")
+        conn = mysql.connector.connect(**db_config)
+        cur  = conn.cursor()
+        sql = """INSERT INTO Empresa
+                 (nome, cidade, pais, estado, cnpj, telefone, email)
+                 VALUES (%s,%s,%s,%s,%s,%s,%s)"""
+        cur.execute(sql, (nome,cidade,pais,estado,cnpj,tel,email))
+        conn.commit()
+        cur.close(); conn.close()
+        messagebox.showinfo("Sucesso", "Empresa cadastrada!")
     except Error as e:
-        messagebox.showerror("Erro no Banco", f"Erro ao cadastrar contrato: {e}")
-        app.set_status(f"Erro: {e}")
+        messagebox.showerror("Erro BD", f"{e}")
 
-def inserir_relatorio(ensaio_id, texto_relatorio):
-    """
-    Insere os dados do relatório final na tabela Relatorio.
-    """
+def inserir_contrato(id_emp, data_ctr, prazo, valor, data_contato):
     try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        sql = """INSERT INTO Relatorio (id_ensaio, texto_relatorio)
-                 VALUES (%s, %s)"""
-        valores = (ensaio_id, texto_relatorio)
-        cursor.execute(sql, valores)
-        conexao.commit()
-        cursor.close()
-        conexao.close()
-        messagebox.showinfo("Sucesso", "Relatório salvo com sucesso!")
-        app.set_status("Relatório salvo com sucesso!")
+        conn = mysql.connector.connect(**db_config)
+        cur  = conn.cursor()
+        sql = """INSERT INTO Contrato
+                 (id_empresa, data_contrato, prazo, valor_servico, data_contato)
+                 VALUES (%s,%s,%s,%s,%s)"""
+        cur.execute(sql, (id_emp,data_ctr,prazo,valor,data_contato))
+        conn.commit()
+        cur.close(); conn.close()
+        messagebox.showinfo("Sucesso", "Contrato cadastrado!")
     except Error as e:
-        messagebox.showerror("Erro no Banco", f"Erro ao salvar relatório: {e}")
-        app.set_status(f"Erro: {e}")
+        messagebox.showerror("Erro BD", f"{e}")
 
-def inserir_saidaDigital(ensaio_id, canal, valor, tempo_ativacao):
-    """
-    Insere os dados de saída digital na tabela SaidaDigital.
-    """
+
+
+def inserir_saidaDigital(ensaio_id, canal, valor, tempo):
     try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        sql = """INSERT INTO SaidaDigital (id_ensaio, canal, valor, tempo_ativacao)
-                 VALUES (%s, %s, %s, %s)"""
-        valores = (ensaio_id, canal, valor, tempo_ativacao)
-        cursor.execute(sql, valores)
-        conexao.commit()
-        cursor.close()
-        conexao.close()
-        messagebox.showinfo("Sucesso", "Saída digital cadastrada!")
-        app.set_status("Saída digital cadastrada!")
+        conn = mysql.connector.connect(**db_config)
+        cur  = conn.cursor()
+        cur.execute("INSERT INTO SaidaDigital (id_ensaio,canal,valor,tempo_ativacao) VALUES (%s,%s,%s,%s)",
+                    (ensaio_id,canal,valor,tempo))
+        conn.commit()
+        cur.close(); conn.close()
+        messagebox.showinfo("Sucesso", "Saída digital salva!")
     except Error as e:
-        messagebox.showerror("Erro no Banco", f"Erro ao salvar saída digital: {e}")
-        app.set_status(f"Erro: {e}")
+        messagebox.showerror("Erro BD", f"{e}")
 
-# ============================
-# Interfaces (Frames) de Funcionalidade
-# ============================
+def inserir_capacete(modelo, fabricante, tamanho):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cur  = conn.cursor()
+        sql = """INSERT INTO Capacete (modelo, fabricante, tamanho)
+                 VALUES (%s,%s,%s)"""
+        cur.execute(sql, (modelo, fabricante, tamanho))
+        conn.commit()
+        cur.close(); conn.close()
+        messagebox.showinfo("Sucesso", "Capacete cadastrado!")
+    except Error as e:
+        messagebox.showerror("Erro BD", f"{e}")
+
+
+
+# --- Frames de Funcionalidade ---
 
 class ElevatorAdjustment(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
         self.step = 1
-        self.position = tk.IntVar(value=0)
-        ttk.Label(self, text="Ajuste Fino do Elevador", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        ttk.Label(self, text="Posição (mm):").grid(row=1, column=0, sticky="w")
-        ttk.Label(self, textvariable=self.position).grid(row=1, column=1, sticky="w")
-        ttk.Button(self, text="+1mm", command=self.increment).grid(row=2, column=0, padx=5, pady=5)
-        ttk.Button(self, text="-1mm", command=self.decrement).grid(row=2, column=1, padx=5, pady=5)
-        ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=3, column=0, columnspan=2, pady=10)
-    
-    def increment(self):
-        self.position.set(self.position.get() + self.step)
-    
-    def decrement(self):
-        self.position.set(self.position.get() - self.step)
+        self.position = tk.IntVar(value=0)  # <— CORRETO
+        ttk.Label(self, text="Ajuste Fino do Elevador", font=('Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
+        ttk.Label(self, text="Posição (mm):").grid(row=1,column=0,sticky="w")
+        ttk.Label(self, textvariable=self.position).grid(row=1,column=1,sticky="w")
+        ttk.Button(self, text="+1mm", command=lambda: self.position.set(self.position.get()+self.step)).grid(row=2,column=0)
+        ttk.Button(self, text="-1mm", command=lambda: self.position.set(self.position.get()-self.step)).grid(row=2,column=1)
 
 class FrictionSetting(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Configuração do Atrito", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Configuração do Atrito", font=('Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
         self.friction = tk.DoubleVar()
-        ttk.Label(self, text="Valor do Atrito:").grid(row=1, column=0, sticky="w")
-        ttk.Entry(self, textvariable=self.friction).grid(row=1, column=1, sticky="w")
-        ttk.Button(self, text="Salvar", command=self.master.master.show_main_menu).grid(row=2, column=0, columnspan=2, pady=10)
+        ttk.Label(self, text="Valor do Atrito:").grid(row=1,column=0,sticky="w")
+        ttk.Entry(self, textvariable=self.friction).grid(row=1,column=1,sticky="w")
+        ttk.Button(self, text="Salvar", command=lambda: inserir_ensaio()).grid(row=2,column=0,columnspan=2)
 
 class SensorCorrection(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Correção dos Acelerômetros", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        self.correction_x = tk.DoubleVar()
-        self.correction_y = tk.DoubleVar()
-        self.correction_z = tk.DoubleVar()
-        ttk.Label(self, text="Correção Canal X:").grid(row=1, column=0, sticky="w")
-        ttk.Entry(self, textvariable=self.correction_x).grid(row=1, column=1, sticky="w")
-        ttk.Label(self, text="Correção Canal Y:").grid(row=2, column=0, sticky="w")
-        ttk.Entry(self, textvariable=self.correction_y).grid(row=2, column=1, sticky="w")
-        ttk.Label(self, text="Correção Canal Z:").grid(row=3, column=0, sticky="w")
-        ttk.Entry(self, textvariable=self.correction_z).grid(row=3, column=1, sticky="w")
-        ttk.Button(self, text="Aplicar", command=self.master.master.show_main_menu).grid(row=4, column=0, columnspan=2, pady=10)
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Correção dos Acelerômetros", font=('Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
+        self.cx = tk.DoubleVar(); self.cy = tk.DoubleVar(); self.cz = tk.DoubleVar()
+        for i, (lbl,var) in enumerate([("Canal X:",self.cx),("Canal Y:",self.cy),("Canal Z:",self.cz)],1):
+            ttk.Label(self, text=lbl).grid(row=i,column=0,sticky="w")
+            ttk.Entry(self, textvariable=var).grid(row=i,column=1,sticky="w")
+        ttk.Button(self, text="Aplicar", command=lambda: None).grid(row=4,column=0,columnspan=2)
 
 class TestSetup(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Configuração do Teste", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        ttk.Label(self, text="Escolha a base do ensaio:").grid(row=1, column=0, columnspan=2, pady=5)
-        ttk.Button(self, text="Plana", command=self.next_step).grid(row=2, column=0, padx=5, pady=5)
-        ttk.Button(self, text="Hemisférica", command=self.next_step).grid(row=2, column=1, padx=5, pady=5)
-        ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=3, column=0, columnspan=2, pady=10)
-    
-    def next_step(self):
-        self.master.master.load_content(TestRegistration)
+        self.grid(sticky="nsew",padx=20,pady=20)
+        ttk.Label(self,text="Configuração do Teste",font=('Helvetica',12,'bold'))\
+            .grid(row=0,column=0,columnspan=2,pady=(0,10))
+        ttk.Button(self,text="Plana",command=lambda: None).grid(row=1,column=0,padx=5,pady=5)
+        ttk.Button(self,text="Hemisférica",command=lambda: None).grid(row=1,column=1,padx=5,pady=5)
+        # botão "Voltar" encaminha para próximo passo no wizard
+        self.btn = ttk.Button(self,text="Salvar",command=lambda: None)
+        self.btn.grid(row=2,column=0,columnspan=2,pady=10)
 
 class TestRegistration(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
         self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Registro dos Dados", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        # Campos para dados de ensaio de impacto (com informações essenciais)
-        self.fields = ["Número da Amostra", "Número do Procedimento/Relatório", "Posição do Ensaio", "Condicionamento", "Norma Utilizada"]
+        ttk.Label(self, text="Registro dos Dados", font=('Helvetica',12,'bold'))\
+            .grid(row=0,column=0,columnspan=2,pady=(0,10))
+        self.fields = ["Número da Amostra","Número do Procedimento/Relatório",
+                       "Posição do Ensaio","Condicionamento","Norma Utilizada"]
         self.entries = {}
-        row = 1
-        for field in self.fields:
-            ttk.Label(self, text=f"{field}:").grid(row=row, column=0, sticky="w", pady=2)
-            entry = ttk.Entry(self)
-            entry.grid(row=row, column=1, sticky="ew", pady=2)
-            self.entries[field] = entry
-            row += 1
-        
-        # Ao salvar, cria um Ensaio e um registro correspondente em EnsaioImpacto
-        ttk.Button(self, text="Salvar Ensaio", command=self.salvar_ensaio).grid(row=row, column=0, columnspan=2, pady=10)
-    
-    def salvar_ensaio(self):
-        # Recupera os dados do formulário
-        num_amostra = self.entries["Número da Amostra"].get()
-        num_procedimento = self.entries["Número do Procedimento/Relatório"].get()
-        posicao_teste = self.entries["Posição do Ensaio"].get()
-        condicionamento = self.entries["Condicionamento"].get()
-        norma_utilizada = self.entries["Norma Utilizada"].get()
-        
-        # Cria um novo Ensaio geral e, em seguida, um registro na especialização EnsaioImpacto
-        ensaio_id = inserir_ensaio()
-        if ensaio_id is not None:
-            if inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada):
-                messagebox.showinfo("Sucesso", "Ensaio registrado com sucesso!")
-                self.master.master.show_main_menu()
+        for i, f in enumerate(self.fields, start=1):
+            ttk.Label(self,text=f+":").grid(row=i,column=0,sticky="w",pady=2)
+            e = ttk.Entry(self); e.grid(row=i,column=1,sticky="ew",pady=2)
+            self.entries[f] = e
+        # botão "Salvar" será reconfigurado pelo wizard
+        self.btn = ttk.Button(self, text="Salvar", command=lambda: None)
+        self.btn.grid(row=len(self.fields)+1, column=0, columnspan=2, pady=10)
 
 class SensorMonitor(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Monitoramento de Sensores", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        
-        ttk.Label(self, text="Aceleração X (mV/g):").grid(row=1, column=0, sticky="w")
-        self.entry_acel_x = ttk.Entry(self, width=10)
-        self.entry_acel_x.grid(row=1, column=1, sticky="w")
-        
-        ttk.Label(self, text="Aceleração Y (mV/g):").grid(row=2, column=0, sticky="w")
-        self.entry_acel_y = ttk.Entry(self, width=10)
-        self.entry_acel_y.grid(row=2, column=1, sticky="w")
-        
-        ttk.Label(self, text="Aceleração Z (mV/g):").grid(row=3, column=0, sticky="w")
-        self.entry_acel_z = ttk.Entry(self, width=10)
-        self.entry_acel_z.grid(row=3, column=1, sticky="w")
-        
-        self.image_label = ttk.Label(self)
-        self.image_label.grid(row=4, column=0, columnspan=2, pady=10)
-        self.display_gif("led_binary.gif")
-        
-        sensor_frame = ttk.LabelFrame(self, text="Sensores Extras")
-        sensor_frame.grid(row=5, column=0, columnspan=2, pady=10, sticky="ew")
-        self.sensor_vars = {}
-        sensors = ["Sensor de Velocidade", "Garra da Coroa", "Porta", "Pistão da Corda"]
-        col = 0
-        row = 0
-        for sensor in sensors:
-            var = tk.BooleanVar()
-            chk = ttk.Checkbutton(sensor_frame, text=sensor, variable=var)
-            chk.grid(row=row, column=col, padx=5, pady=5, sticky="w")
-            self.sensor_vars[sensor] = var
-            col += 1
-            if col > 1:
-                col = 0
-                row += 1
-        
-        ttk.Button(self, text="Iniciar Teste", command=self.iniciar_teste).grid(row=6, column=0, columnspan=2, pady=10)
-        ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=7, column=0, columnspan=2, pady=10)
-    
-    def display_gif(self, filepath):
-        try:
-            self.gif = Image.open(filepath)
-            self.frames = [ImageTk.PhotoImage(frame.copy()) for frame in ImageSequence.Iterator(self.gif)]
-            self.index = 0
-            self.animate()
-        except Exception as e:
-            ttk.Label(self, text="Erro ao carregar imagem").grid(row=4, column=0, columnspan=2)
-    
-    def animate(self):
-        self.image_label.config(image=self.frames[self.index])
-        self.index = (self.index + 1) % len(self.frames)
-        self.after(100, self.animate)
-    
-    def iniciar_teste(self):
-        try:
-            acel_x = float(self.entry_acel_x.get())
-            acel_y = float(self.entry_acel_y.get())
-            acel_z = float(self.entry_acel_z.get())
-        except ValueError:
-            messagebox.showerror("Erro", "Insira valores numéricos válidos para os acelerômetros.")
-            return
-        inserir_acelerometro(acel_x, acel_y, acel_z)
-        self.master.master.load_content(TestSetup)
+        self.grid(sticky="nsew",padx=20,pady=20)
+        ttk.Label(self,text="Monitor de Acelerômetros",font=('Helvetica',12,'bold'))\
+            .grid(row=0,column=0,columnspan=2,pady=(0,10))
+        # entradas de aceleração
+        self.eX = ttk.Entry(self,width=10); self.eX.grid(row=1,column=1,sticky="w")
+        self.eY = ttk.Entry(self,width=10); self.eY.grid(row=2,column=1,sticky="w")
+        self.eZ = ttk.Entry(self,width=10); self.eZ.grid(row=3,column=1,sticky="w")
+        ttk.Label(self,text="X (mV/g):").grid(row=1,column=0,sticky="w")
+        ttk.Label(self,text="Y (mV/g):").grid(row=2,column=0,sticky="w")
+        ttk.Label(self,text="Z (mV/g):").grid(row=3,column=0,sticky="w")
+        self.btn = ttk.Button(self,text="Salvar",command=lambda: None)
+        self.btn.grid(row=4,column=0,columnspan=2,pady=10)
 
 class AboutFrame(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Sobre", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, pady=(0,10))
-        ttk.Label(self, text="Software de Ensaio de Capacete\nVersão 1.0\n© 2025 Sua Empresa").grid(row=1, column=0, pady=10)
-        ttk.Button(self, text="Voltar", command=self.master.master.show_main_menu).grid(row=2, column=0, pady=10)
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Sobre", font=('Helvetica',14,'bold')).pack()
+        ttk.Label(self, text="Ensaio de Capacete v1.0\n© 2025").pack()
 
 class EmpresaFrame(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Cadastro de Empresa", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        ttk.Label(self, text="Nome:").grid(row=1, column=0, sticky="w")
-        self.entry_nome = ttk.Entry(self)
-        self.entry_nome.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Cidade:").grid(row=2, column=0, sticky="w")
-        self.entry_cidade = ttk.Entry(self)
-        self.entry_cidade.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="País:").grid(row=3, column=0, sticky="w")
-        self.entry_pais = ttk.Entry(self)
-        self.entry_pais.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Estado:").grid(row=4, column=0, sticky="w")
-        self.entry_estado = ttk.Entry(self)
-        self.entry_estado.grid(row=4, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="CNPJ:").grid(row=5, column=0, sticky="w")
-        self.entry_cnpj = ttk.Entry(self)
-        self.entry_cnpj.grid(row=5, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Telefone:").grid(row=6, column=0, sticky="w")
-        self.entry_telefone = ttk.Entry(self)
-        self.entry_telefone.grid(row=6, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Email:").grid(row=7, column=0, sticky="w")
-        self.entry_email = ttk.Entry(self)
-        self.entry_email.grid(row=7, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Button(self, text="Salvar", command=self.salvar_empresa).grid(row=8, column=0, columnspan=2, pady=10)
-    
-    def salvar_empresa(self):
-        nome = self.entry_nome.get()
-        cidade = self.entry_cidade.get()
-        pais = self.entry_pais.get()
-        estado = self.entry_estado.get()
-        cnpj = self.entry_cnpj.get()
-        telefone = self.entry_telefone.get()
-        email = self.entry_email.get()
-        if not nome:
-            messagebox.showerror("Erro", "O campo Nome é obrigatório.")
-            return
-        inserir_empresa(nome, cidade, pais, estado, cnpj, telefone, email)
-        self.master.master.show_main_menu()
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Empresa", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
+        self.nm = ttk.Entry(self); self.ct = ttk.Entry(self); self.pais=ttk.Entry(self)
+        self.est=ttk.Entry(self); self.cnpj=ttk.Entry(self); self.tel=ttk.Entry(self); self.email=ttk.Entry(self)
+        labels = ["Nome","Cidade","País","Estado","CNPJ","Tel","Email"]
+        ents   = [self.nm,self.ct,self.pais,self.est,self.cnpj,self.tel,self.email]
+        for i,(l,e) in enumerate(zip(labels,ents),1):
+            ttk.Label(self, text=l+":").grid(row=i,column=0,sticky="w")
+            e.grid(row=i,column=1,sticky="ew")
+        ttk.Button(self, text="Salvar", command=lambda: inserir_empresa(
+            self.nm.get(),self.ct.get(),self.pais.get(),
+            self.est.get(),self.cnpj.get(),self.tel.get(),self.email.get())
+        ).grid(row=8,column=0,columnspan=2)
 
 class CapacetesFrame(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Cadastro de Capacetes", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        ttk.Label(self, text="Modelo:").grid(row=1, column=0, sticky="w")
-        self.entry_modelo = ttk.Entry(self)
-        self.entry_modelo.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Fabricante:").grid(row=2, column=0, sticky="w")
-        self.entry_fabricante = ttk.Entry(self)
-        self.entry_fabricante.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Tamanho:").grid(row=3, column=0, sticky="w")
-        self.entry_tamanho = ttk.Entry(self)
-        self.entry_tamanho.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Button(self, text="Salvar", command=self.salvar_capacete).grid(row=4, column=0, columnspan=2, pady=10)
-    
-    def salvar_capacete(self):
-        messagebox.showinfo("Informação", "Capacete salvo (função a ser implementada).")
-        self.master.master.show_main_menu()
+    def __init__(self, parent, controller=None):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Capacete", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
+        self.mod = ttk.Entry(self); self.fab = ttk.Entry(self); self.tam=ttk.Entry(self)
+        for i,(l,e) in enumerate(zip(["Modelo","Fabricante","Tamanho"],
+                                     [self.mod,self.fab,self.tam]),1):
+            ttk.Label(self, text=l+":").grid(row=i,column=0,sticky="w")
+            e.grid(row=i,column=1,sticky="ew")
+        ttk.Button(self, text="Salvar", command=self.salvar).grid(row=4,column=0,columnspan=2)
+
+    def salvar(self):
+        m,f,t = self.mod.get(), self.fab.get(), self.tam.get()
+        if not (m and f and t):
+            messagebox.showerror("Erro","Preencha todos os campos")
+            return
+        inserir_capacete(m,f,t)
+        # limpa campos
+        self.mod.delete(0,'end'); self.fab.delete(0,'end'); self.tam.delete(0,'end')
 
 class ContratoFrame(ttk.Frame):
-    def __init__(self, master):
-        super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Cadastro de Contrato", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        ttk.Label(self, text="ID da Empresa:").grid(row=1, column=0, sticky="w")
-        self.entry_id_empresa = ttk.Entry(self)
-        self.entry_id_empresa.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Data do Contrato (AAAA-MM-DD):").grid(row=2, column=0, sticky="w")
-        self.entry_data_contrato = ttk.Entry(self)
-        self.entry_data_contrato.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Prazo (dias):").grid(row=3, column=0, sticky="w")
-        self.entry_prazo = ttk.Entry(self)
-        self.entry_prazo.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Valor do Serviço:").grid(row=4, column=0, sticky="w")
-        self.entry_valor_servico = ttk.Entry(self)
-        self.entry_valor_servico.grid(row=4, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Data de Contato (AAAA-MM-DD):").grid(row=5, column=0, sticky="w")
-        self.entry_data_contato = ttk.Entry(self)
-        self.entry_data_contato.grid(row=5, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Button(self, text="Salvar", command=self.salvar_contrato).grid(row=6, column=0, columnspan=2, pady=10)
-    
-    def salvar_contrato(self):
+    def __init__(self, parent, controller=None):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Contrato", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
+        ttk.Label(self, text="Empresa:").grid(row=1,column=0,sticky="w")
+        self.combo_emp = ttk.Combobox(self, state="readonly")
+        self.combo_emp.grid(row=1,column=1,sticky="ew")
+        self._carregar_empresas()
+        ttk.Label(self, text="Data (YYYY-MM-DD):").grid(row=2,column=0,sticky="w")
+        self.dc=ttk.Entry(self); self.dc.grid(row=2,column=1,sticky="ew")
+        ttk.Label(self, text="Prazo (dias):").grid(row=3,column=0,sticky="w")
+        self.pr=ttk.Entry(self); self.pr.grid(row=3,column=1,sticky="ew")
+        ttk.Label(self, text="Valor:").grid(row=4,column=0,sticky="w")
+        self.vs=ttk.Entry(self); self.vs.grid(row=4,column=1,sticky="ew")
+        ttk.Label(self, text="Data Contato:").grid(row=5,column=0,sticky="w")
+        self.dcon=ttk.Entry(self); self.dcon.grid(row=5,column=1,sticky="ew")
+        ttk.Button(self, text="Salvar", command=self.salvar).grid(row=6,column=0,columnspan=2)
+
+    def _carregar_empresas(self):
         try:
-            id_empresa = int(self.entry_id_empresa.get())
-            data_contrato = self.entry_data_contrato.get()
-            prazo = int(self.entry_prazo.get())
-            valor_servico = float(self.entry_valor_servico.get())
-            data_contato = self.entry_data_contato.get()
-        except ValueError:
-            messagebox.showerror("Erro", "Verifique os valores inseridos (ID, prazo e valor devem ser numéricos).")
+            cnx = mysql.connector.connect(**db_config)
+            cur = cnx.cursor()
+            cur.execute("SELECT id_empresa, nome FROM Empresa")
+            rows = cur.fetchall()
+            cur.close(); cnx.close()
+            self.combo_emp['values'] = [f"{r[0]} - {r[1]}" for r in rows]
+        except Error as e:
+            messagebox.showerror("Erro BD", f"{e}")
+
+    def salvar(self):
+        sel = self.combo_emp.get()
+        if not sel:
+            messagebox.showerror("Erro","Selecione uma empresa")
             return
-        inserir_contrato(id_empresa, data_contrato, prazo, valor_servico, data_contato)
-        self.master.master.show_main_menu()
+        id_emp = int(sel.split(" - ")[0])
+        try:
+            inserir_contrato(id_emp,
+                             self.dc.get(),
+                             int(self.pr.get()),
+                             float(self.vs.get()),
+                             self.dcon.get())
+        except ValueError:
+            messagebox.showerror("Erro","Valores numéricos inválidos")
+
+
 
 class RelatorioFrame(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Gerar Relatório", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        ttk.Label(self, text="ID do Ensaio:").grid(row=1, column=0, sticky="w")
-        self.entry_id_ensaio = ttk.Entry(self)
-        self.entry_id_ensaio.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Texto do Relatório:").grid(row=2, column=0, sticky="w")
-        self.text_relatorio = tk.Text(self, height=10)
-        self.text_relatorio.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Button(self, text="Salvar", command=self.salvar_relatorio).grid(row=3, column=0, columnspan=2, pady=10)
-    
-    def salvar_relatorio(self):
-        try:
-            ensaio_id = int(self.entry_id_ensaio.get())
-        except ValueError:
-            messagebox.showerror("Erro", "ID do Ensaio deve ser numérico.")
-            return
-        texto_relatorio = self.text_relatorio.get("1.0", tk.END).strip()
-        if not texto_relatorio:
-            messagebox.showerror("Erro", "O relatório não pode estar vazio.")
-            return
-        inserir_relatorio(ensaio_id, texto_relatorio)
-        self.master.master.show_main_menu()
+        self.grid(sticky="nsew",padx=20,pady=20)
+        ttk.Label(self,text="Gerar Relatório",font=('Helvetica',12,'bold'))\
+            .grid(row=0,column=0,columnspan=2,pady=(0,10))
+        ttk.Label(self,text="ID Ensaio:").grid(row=1,column=0,sticky="w")
+        self.eID = ttk.Entry(self); self.eID.grid(row=1,column=1,sticky="ew")
+        ttk.Label(self,text="Texto:").grid(row=2,column=0,sticky="nw")
+        self.txt = tk.Text(self,height=8); self.txt.grid(row=2,column=1,sticky="ew")
+        self.btn = ttk.Button(self,text="Salvar",command=lambda: None)
+        self.btn.grid(row=3,column=0,columnspan=2,pady=10)
 
 class SaidaDigitalFrame(ttk.Frame):
-    def _init_(self, master):
-        super()._init_(master)
-        self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Cadastro de Saída Digital", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
-        ttk.Label(self, text="ID do Ensaio:").grid(row=1, column=0, sticky="w")
-        self.entry_id_ensaio = ttk.Entry(self)
-        self.entry_id_ensaio.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Canal:").grid(row=2, column=0, sticky="w")
-        self.entry_canal = ttk.Entry(self)
-        self.entry_canal.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Valor (0 ou 1):").grid(row=3, column=0, sticky="w")
-        self.entry_valor = ttk.Entry(self)
-        self.entry_valor.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Label(self, text="Tempo de Ativação (s):").grid(row=4, column=0, sticky="w")
-        self.entry_tempo = ttk.Entry(self)
-        self.entry_tempo.grid(row=4, column=1, sticky="ew", padx=5, pady=2)
-        ttk.Button(self, text="Salvar", command=self.salvar_saida).grid(row=5, column=0, columnspan=2, pady=10)
-    
-    def salvar_saida(self):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Saída Digital", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
+        self.ide=ttk.Entry(self); self.can=ttk.Entry(self)
+        self.val=ttk.Entry(self); self.tem=ttk.Entry(self)
+        labels=["ID Ensaio","Canal","Valor(0/1)","Tempo(s)"]
+        ents=[self.ide,self.can,self.val,self.tem]
+        for i,(l,e) in enumerate(zip(labels,ents),1):
+            ttk.Label(self, text=l+":").grid(row=i,column=0,sticky="w")
+            e.grid(row=i,column=1,sticky="ew")
+        ttk.Button(self, text="Salvar", command=lambda: inserir_saidaDigital(
+            int(self.ide.get()), self.can.get(), bool(int(self.val.get())), float(self.tem.get()))
+        ).grid(row=5,column=0,columnspan=2)
+
+
+
+# ============================
+# Wizard de “Novo Ensaio”
+# ============================
+
+class NovoEnsaioWizard(tk.Toplevel):
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("Fluxo: Novo Ensaio")
+        self.geometry("600x400")
+        self.master = master  # referência ao MainApp
+        # criar um container para trocar de frame
+        self.container = ttk.Frame(self)
+        self.container.pack(expand=True, fill="both")
+        # iniciar ensaio no banco
+        self.ensaio_id = inserir_ensaio()
+        # definir sequência de classes
+        self.steps = [TestRegistration, TestSetup, SensorMonitor, RelatorioFrame]
+        self.index = 0
+        self.show_step()
+
+    def show_step(self):
+        # destrói frame anterior
+        for w in self.container.winfo_children(): w.destroy()
+        cls = self.steps[self.index]
+        frame = cls(self.container)
+        # reconfigurar o botão "Salvar" de cada step
+        if isinstance(frame, TestRegistration):
+            frame.btn.config(text="Próximo", command=self.save_registration)
+        elif isinstance(frame, TestSetup):
+            frame.btn.config(text="Próximo", command=self.save_setup)
+        elif isinstance(frame, SensorMonitor):
+            frame.btn.config(text="Próximo", command=self.save_sensor)
+        elif isinstance(frame, RelatorioFrame):
+            frame.btn.config(text="Finalizar", command=self.save_report)
+
+    def save_registration(self):
+        frm = self.container.winfo_children()[0]
+        # validação: nenhum campo pode ficar vazio
+        for field, entry in frm.entries.items():
+            if not entry.get().strip():
+                messagebox.showerror("Erro", f"O campo “{field}” é obrigatório.")
+                return
+        # se chegou aqui, todos preenchidos:
+        vals = {f: frm.entries[f].get().strip() for f in frm.fields}
+        inserir_ensaio_impacto(
+            self.ensaio_id,
+            vals["Número da Amostra"],
+            vals["Número do Procedimento/Relatório"],
+            vals["Posição do Ensaio"],
+            vals["Condicionamento"],
+            vals["Norma Utilizada"]
+        )
+        self.index += 1
+        self.show_step()
+
+    def save_setup(self):
+        # (se houver algum dado a salvar aqui, faria aqui)
+        self.index += 1
+        self.show_step()
+
+    def save_sensor(self):
+        frm = self.container.winfo_children()[0]
         try:
-            ensaio_id = int(self.entry_id_ensaio.get())
-            canal = self.entry_canal.get()
-            valor = bool(int(self.entry_valor.get()))
-            tempo = float(self.entry_tempo.get())
+            x = float(frm.eX.get()); y = float(frm.eY.get()); z = float(frm.eZ.get())
         except ValueError:
-            messagebox.showerror("Erro", "Verifique os valores inseridos (ID e tempo numéricos; valor 0 ou 1).")
+            messagebox.showerror("Erro","Insira valores numéricos válidos")
             return
-        inserir_saidaDigital(ensaio_id, canal, valor, tempo)
-        self.master.master.show_main_menu()
+        inserir_acelerometro(x,y,z,self.ensaio_id)
+        self.index += 1
+        self.show_step()
 
-# ============================
-# Novas funções de fluxo de Ensaio
-# ============================
+    def save_report(self):
+        frm = self.container.winfo_children()[0]
+        try:
+            idx = int(frm.eID.get())
+        except ValueError:
+            messagebox.showerror("Erro","ID Inválido")
+            return
+        texto = frm.txt.get("1.0","end").strip()
+        if not texto:
+            messagebox.showerror("Erro","Relatório vazio")
+            return
+        inserir_relatorio(idx, texto)
+        messagebox.showinfo("Concluído","Ensaio finalizado com sucesso!")
+        self.destroy()
 
-def inserir_ensaio():
-    """
-    Insere um registro na tabela Ensaio com valores padrão para os FKs,
-    retornando o id_ensaio gerado.
-    """
-    try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        # Supondo que os campos id_contrato e id_capacete permitam NULL
-        sql = "INSERT INTO Ensaio (id_contrato, id_capacete) VALUES (NULL, NULL)"
-        cursor.execute(sql)
-        conexao.commit()
-        ensaio_id = cursor.lastrowid
-        cursor.close()
-        conexao.close()
-        return ensaio_id
-    except Error as e:
-        messagebox.showerror("Erro", f"Erro ao inserir ensaio: {e}")
-        return None
 
-def inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada):
-    """
-    Insere os dados específicos do ensaio de impacto na tabela EnsaioImpacto.
-    Outros campos (temperatura, umidade, valor_atrito, dados de acelerômetro, notas)
-    ficam como NULL e podem ser atualizados posteriormente.
-    """
-    try:
-        conexao = mysql.connector.connect(**db_config)
-        cursor = conexao.cursor()
-        sql = """INSERT INTO EnsaioImpacto 
-                 (id_ensaio, num_amostra, num_procedimento, posicao_teste, condicionamento, standard_utilizado, temperatura, umidade, valor_atrito, norma, acel_x, acel_y, acel_z, tempo_amostra, notas)
-                 VALUES (%s, %s, %s, %s, %s, %s, NULL, NULL, NULL, %s, NULL, NULL, NULL, NULL, NULL)"""
-        valores = (ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma_utilizada, norma_utilizada)
-        cursor.execute(sql, valores)
-        conexao.commit()
-        cursor.close()
-        conexao.close()
-        return True
-    except Error as e:
-        messagebox.showerror("Erro", f"Erro ao inserir ensaio de impacto: {e}")
-        return False
 
-# ============================
-# Classe Principal: MainApp com Status Bar
-# ============================
+# =================================
+# Nova Frame: Ensaios Concluídos
+# =================================
+
+class EnsaiosConcluidosFrame(ttk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.grid(sticky="nsew", padx=10, pady=10)
+        ttk.Label(self, text="Ensaios Concluídos", font=('Helvetica',14,'bold')).pack(anchor="w")
+        # Treeview
+        cols = ("ID","Amostra","Proced.","Empresa","Capacete","Data")
+        self.tv = ttk.Treeview(self, columns=cols, show="headings")
+        for c in cols:
+            self.tv.heading(c,text=c)
+            self.tv.column(c,width=100)
+        self.tv.pack(expand=True, fill="both")
+        self.tv.bind("<<TreeviewSelect>>", self.on_select)
+        # detalhe
+        self.txt = tk.Text(self, height=8)
+        self.txt.pack(expand=True, fill="x", pady=10)
+        self.carregar_ensaio()
+
+    def carregar_ensaio(self):
+        # busca apenas ensaios com relatório
+        try:
+            cnx = mysql.connector.connect(**db_config)
+            cur = cnx.cursor()
+            sql = """
+              SELECT e.id_ensaio, ei.num_amostra, ei.num_procedimento,
+                     emp.nome, cap.modelo, e.data_ensaio
+              FROM Ensaio e
+                JOIN EnsaioImpacto ei ON e.id_ensaio=ei.id_ensaio
+                LEFT JOIN Relatorio r ON e.id_ensaio=r.id_ensaio
+                LEFT JOIN Empresa emp ON e.id_contrato=(
+                    SELECT id_contrato FROM Contrato WHERE id_contrato=e.id_contrato
+                )
+                LEFT JOIN Capacete cap ON e.id_capacete=cap.id_capacete
+              WHERE r.id_relatorio IS NOT NULL
+              ORDER BY e.data_ensaio DESC
+            """
+            cur.execute(sql)
+            for row in cur.fetchall():
+                self.tv.insert("","end",values=row)
+            cur.close(); cnx.close()
+        except Error as e:
+            messagebox.showerror("Erro BD", str(e))
+
+    def on_select(self, evt):
+        sel = self.tv.selection()
+        if not sel: return
+        ens_id = self.tv.item(sel[0])["values"][0]
+        # carregar todos os detalhes
+        try:
+            cnx = mysql.connector.connect(**db_config)
+            cur = cnx.cursor()
+            sql = """
+              SELECT emp.nome, ctr.prazo, cap.modelo, ei.*, r.texto_relatorio
+              FROM Ensaio e
+                JOIN EnsaioImpacto ei ON e.id_ensaio=ei.id_ensaio
+                LEFT JOIN Relatorio r ON e.id_ensaio=r.id_ensaio
+                LEFT JOIN Contrato ctr ON e.id_contrato=ctr.id_contrato
+                LEFT JOIN Empresa emp ON ctr.id_empresa=emp.id_empresa
+                LEFT JOIN Capacete cap ON e.id_capacete=cap.id_capacete
+              WHERE e.id_ensaio=%s
+            """
+            cur.execute(sql,(ens_id,))
+            rec=cur.fetchone()
+            cur.close(); cnx.close()
+            # exibe
+            self.txt.delete("1.0","end")
+            labels = ["Empresa","Prazo(dias)","Capacete",
+                      "ID Impacto","Amostra","Proced.","Posição","Cond.","Std",
+                      "Temp","Umid","Atrito","Norma","aX","aY","aZ","tAm","Notas","Relatório"]
+            for lab,val in zip(labels,rec):
+                self.txt.insert("end",f"{lab}: {val}\n")
+        except Error as e:
+            messagebox.showerror("Erro BD", str(e))
+
+
+# --- MainApp com Notebook e Status Bar ---
 
 class MainApp(tk.Tk):
     def __init__(self):
@@ -551,66 +515,43 @@ class MainApp(tk.Tk):
         self.title("Software de Ensaio de Capacete")
         self.geometry("900x650")
         self.configure(bg="#f0f0f0")
-        
-        self.style = ttk.Style(self)
-        self.style.theme_use("clam")
+        self.style = ttk.Style(self); self.style.theme_use("clam")
         self.style.configure("TFrame", background="#f0f0f0")
-        self.style.configure("TLabel", background="#f0f0f0", font=("Helvetica", 10))
-        self.style.configure("TButton", font=("Helvetica", 10))
-        
-        # Áreas de navegação e conteúdo
-        self.nav_frame = ttk.Frame(self, width=220, padding=10)
-        self.nav_frame.grid(row=0, column=0, sticky="ns")
-        self.content_frame = ttk.Frame(self, padding=10)
-        self.content_frame.grid(row=0, column=1, sticky="nsew")
-        
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=1)
-        
-        # Status Bar
-        self.status_bar = ttk.Label(self, text="Pronto", relief="sunken", anchor="w")
-        self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew")
-        
-        self.create_navigation()
-        self.show_main_menu()
-    
-    def create_navigation(self):
-        ttk.Label(self.nav_frame, text="Menu", font=("Helvetica", 12, "bold")).grid(row=0, column=0, pady=10)
-        nav_buttons = [
-            ("Ajuste do Elevador", lambda: self.load_content(ElevatorAdjustment)),
-            ("Configurar Atrito", lambda: self.load_content(FrictionSetting)),
-            ("Monitorar Sensores", lambda: self.load_content(SensorMonitor)),
-            ("Correção dos Acelerômetros", lambda: self.load_content(SensorCorrection)),
-            ("Registro dos Dados", lambda: self.load_content(TestRegistration)),
-            ("Configuração do Teste", lambda: self.load_content(TestSetup)),
-            ("Empresa", lambda: self.load_content(EmpresaFrame)),
-            ("Capacetes", lambda: self.load_content(CapacetesFrame)),
-            ("Contrato", lambda: self.load_content(ContratoFrame)),
-            ("Relatório", lambda: self.load_content(RelatorioFrame)),
-            ("Saída Digital", lambda: self.load_content(SaidaDigitalFrame)),
-            ("Sobre", lambda: self.load_content(AboutFrame))
+        self.style.configure("TLabel", background="#f0f0f0", font=("Helvetica",10))
+        self.style.configure("TButton", font=("Helvetica",10))
+
+        self.nav = ttk.Frame(self, width=200, padding=10)
+        self.nav.grid(row=0,column=0,sticky="ns")
+        self.content = ttk.Frame(self, padding=10)
+        self.content.grid(row=0,column=1,sticky="nsew")
+        self.columnconfigure(1, weight=1); self.rowconfigure(0, weight=1)
+
+        ttk.Button(self.nav, text="▶ Novo Ensaio", command=lambda: NovoEnsaioWizard(self))\
+            .grid(row=0,column=0,pady=5,sticky="ew")
+
+        nav_items = [
+            ("Ensaios Concluídos", lambda: self.load(EnsaiosConcluidosFrame)),
+            ("Empresa", lambda: self.load(EmpresaFrame)),
+            ("Capacetes", lambda: self.load(CapacetesFrame)),
+            ("Contrato", lambda: self.load(ContratoFrame)),
+            ("Saída Digital", lambda: self.load(SaidaDigitalFrame)),
+            ("Sobre", lambda: self.load(AboutFrame)),
         ]
-        for idx, (text, command) in enumerate(nav_buttons, start=1):
-            ttk.Button(self.nav_frame, text=text, command=command).grid(row=idx, column=0, pady=5, sticky="ew")
-    
-    def clear_content(self):
-        for widget in self.content_frame.winfo_children():
-            widget.destroy()
-    
-    def load_content(self, content_class):
-        self.clear_content()
-        content_class(self.content_frame)
-    
-    def show_main_menu(self):
-        self.clear_content()
-        welcome = ttk.Label(self.content_frame, text="Bem-vindo ao Software de Ensaio de Capacete", font=("Helvetica", 14))
-        welcome.pack(expand=True)
-    
-    def set_status(self, msg):
-        self.status_bar.config(text=msg)
+        for i,(txt,cmd) in enumerate(nav_items, start=1):
+            ttk.Button(self.nav, text=txt, command=cmd).grid(row=i,column=0,pady=5,sticky="ew")
+
+        self.show_welcome()
+
+    def show_welcome(self):
+        for w in self.content.winfo_children(): w.destroy()
+        ttk.Label(self.content, text="Bem-vindo ao Software de Ensaio de Capacete",
+                  font=("Helvetica",14)).pack(expand=True)
+
+    def load(self, cls):
+        for w in self.content.winfo_children(): w.destroy()
+        frame = cls(self.content, self)
+        frame.grid(sticky="nsew")
 
 if __name__ == "__main__":
-    print("Chamando mainloop agora")
     app = MainApp()
     app.mainloop()
-    print ("fim do código")
