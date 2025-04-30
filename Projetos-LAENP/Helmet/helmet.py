@@ -14,8 +14,9 @@ db_config = {
     'auth_plugin': 'mysql_native_password'
 }
 
+
 # ----------------------------
-# Funções de Inserção no Banco
+# Funções de Inserção e Atualização no Banco
 # ----------------------------
 
 def inserir_ensaio():
@@ -31,6 +32,23 @@ def inserir_ensaio():
         messagebox.showerror("Erro", f"Erro ao inserir ensaio: {e}")
         return None
 
+
+def atualizar_ensaio(ensaio_id, id_contrato, id_capacete):
+    """
+    Atualiza o registro de Ensaio com os IDs de contrato e capacete selecionados.
+    """
+    try:
+        cnx = mysql.connector.connect(**db_config)
+        cur = cnx.cursor()
+        sql = "UPDATE Ensaio SET id_contrato=%s, id_capacete=%s WHERE id_ensaio=%s"
+        cur.execute(sql, (id_contrato, id_capacete, ensaio_id))
+        cnx.commit()
+        cur.close()
+        cnx.close()
+    except Error as e:
+        print(f"Erro ao atualizar o ensaio: {e}") 
+
+        
 def inserir_ensaio_impacto(ensaio_id, num_amostra, num_procedimento, posicao_teste, condicionamento, norma):
     try:
         cnx = mysql.connector.connect(**db_config)
@@ -142,6 +160,7 @@ def inserir_capacete(modelo, fabricante, tamanho):
 class ElevatorAdjustment(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         self.step = 1
         self.position = tk.IntVar(value=0)  # <— CORRETO
@@ -154,6 +173,7 @@ class ElevatorAdjustment(ttk.Frame):
 class FrictionSetting(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Configuração do Atrito", font=('Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
         self.friction = tk.DoubleVar()
@@ -164,6 +184,7 @@ class FrictionSetting(ttk.Frame):
 class SensorCorrection(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Correção dos Acelerômetros", font=('Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
         self.cx = tk.DoubleVar(); self.cy = tk.DoubleVar(); self.cz = tk.DoubleVar()
@@ -185,21 +206,55 @@ class TestSetup(ttk.Frame):
         self.btn.grid(row=2,column=0,columnspan=2,pady=10)
 
 class TestRegistration(ttk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, controller):
         super().__init__(master)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=20, pady=20)
-        ttk.Label(self, text="Registro dos Dados", font=('Helvetica',12,'bold'))\
-            .grid(row=0,column=0,columnspan=2,pady=(0,10))
+        ttk.Label(self, text="Registro dos Dados", font=('Helvetica',12,'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
+        # Combobox de Contrato
+        ttk.Label(self, text="Contrato:").grid(row=1, column=0, sticky="w")
+        self.combo_contrato = ttk.Combobox(self, state="readonly")
+        self.combo_contrato.grid(row=1, column=1, sticky="ew", pady=2)
+        self._load_contratos()
+        # Combobox de Capacete
+        ttk.Label(self, text="Capacete:").grid(row=2, column=0, sticky="w")
+        self.combo_capacete = ttk.Combobox(self, state="readonly")
+        self.combo_capacete.grid(row=2, column=1, sticky="ew", pady=2)
+        self._load_capacetes()
+        # Campos de impacto
         self.fields = ["Número da Amostra","Número do Procedimento/Relatório",
                        "Posição do Ensaio","Condicionamento","Norma Utilizada"]
         self.entries = {}
-        for i, f in enumerate(self.fields, start=1):
-            ttk.Label(self,text=f+":").grid(row=i,column=0,sticky="w",pady=2)
-            e = ttk.Entry(self); e.grid(row=i,column=1,sticky="ew",pady=2)
+        for i, f in enumerate(self.fields, start=3):
+            ttk.Label(self, text=f+":").grid(row=i, column=0, sticky="w", pady=2)
+            e = ttk.Entry(self)
+            e.grid(row=i, column=1, sticky="ew", pady=2)
             self.entries[f] = e
-        # botão "Salvar" será reconfigurado pelo wizard
+        # Botão "Salvar" será controlado pelo wizard
         self.btn = ttk.Button(self, text="Salvar", command=lambda: None)
-        self.btn.grid(row=len(self.fields)+1, column=0, columnspan=2, pady=10)
+        self.btn.grid(row=3+len(self.fields), column=0, columnspan=2, pady=10)
+
+    def _load_contratos(self):
+        try:
+            cnx = mysql.connector.connect(**db_config)
+            cur = cnx.cursor()
+            cur.execute("SELECT id_contrato, id_empresa FROM Contrato")
+            rows = cur.fetchall()
+            cur.close(); cnx.close()
+            self.combo_contrato['values'] = [f"{r[0]} (Emp {r[1]})" for r in rows]
+        except Error as e:
+            messagebox.showerror("Erro BD", f"{e}")
+
+    def _load_capacetes(self):
+        try:
+            cnx = mysql.connector.connect(**db_config)
+            cur = cnx.cursor()
+            cur.execute("SELECT id_capacete, modelo FROM Capacete")
+            rows = cur.fetchall()
+            cur.close(); cnx.close()
+            self.combo_capacete['values'] = [f"{r[0]} - {r[1]}" for r in rows]
+        except Error as e:
+            messagebox.showerror("Erro BD", f"{e}")
 
 class SensorMonitor(ttk.Frame):
     def __init__(self, master):
@@ -220,6 +275,7 @@ class SensorMonitor(ttk.Frame):
 class AboutFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Sobre", font=('Helvetica',14,'bold')).pack()
         ttk.Label(self, text="Ensaio de Capacete v1.0\n© 2025").pack()
@@ -227,6 +283,7 @@ class AboutFrame(ttk.Frame):
 class EmpresaFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Empresa", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
         self.nm = ttk.Entry(self); self.ct = ttk.Entry(self); self.pais=ttk.Entry(self)
@@ -244,6 +301,7 @@ class EmpresaFrame(ttk.Frame):
 class CapacetesFrame(ttk.Frame):
     def __init__(self, parent, controller=None):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Capacete", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
         self.mod = ttk.Entry(self); self.fab = ttk.Entry(self); self.tam=ttk.Entry(self)
@@ -265,6 +323,7 @@ class CapacetesFrame(ttk.Frame):
 class ContratoFrame(ttk.Frame):
     def __init__(self, parent, controller=None):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Contrato", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
         ttk.Label(self, text="Empresa:").grid(row=1,column=0,sticky="w")
@@ -325,6 +384,7 @@ class RelatorioFrame(ttk.Frame):
 class SaidaDigitalFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Saída Digital", font=('Helvetica',14,'bold')).grid(row=0,column=0,columnspan=2)
         self.ide=ttk.Entry(self); self.can=ttk.Entry(self)
@@ -435,6 +495,7 @@ class NovoEnsaioWizard(tk.Toplevel):
 class EnsaiosConcluidosFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Ensaios Concluídos", font=('Helvetica',14,'bold')).pack(anchor="w")
         # Treeview
@@ -544,7 +605,7 @@ class MainApp(tk.Tk):
 
     def show_welcome(self):
         for w in self.content.winfo_children(): w.destroy()
-        ttk.Label(self.content, text="Bem-vindo ao Software de Ensaio de Capacete",
+        ttk.Label(self.content, text="Bem-vindo ao Software de Ensaio de Capacetes",
                   font=("Helvetica",14)).pack(expand=True)
 
     def load(self, cls):
