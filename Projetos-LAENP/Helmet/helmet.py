@@ -4,20 +4,23 @@ from PIL import Image, ImageTk, ImageSequence
 import mysql.connector
 from mysql.connector import Error
 from datetime import datetime
+import serial 
+import threading
 
-# Configurações do banco de dados MySQL
+
+ARDUINO_PORT = "COM3"      
+ARDUINO_BAUD = 9600
+ser = None
+
 db_config = {
     'host': 'localhost',
     'user': 'root',
     'password': 'sua_senha',
-    'database': 'ensaios_capacetes',
+    'database': 'ensaios_capacete',
     'auth_plugin': 'mysql_native_password'
 }
 
 
-# ----------------------------
-# Funções de Inserção e Atualização no Banco
-# ----------------------------
 
 def inserir_ensaio():
     try:
@@ -155,7 +158,7 @@ def inserir_capacete(modelo, fabricante, tamanho):
 
 
 
-# --- Frames de Funcionalidade ---
+
 
 class ElevatorAdjustment(ttk.Frame):
     def __init__(self, parent, controller):
@@ -181,17 +184,26 @@ class FrictionSetting(ttk.Frame):
         ttk.Entry(self, textvariable=self.friction).grid(row=1,column=1,sticky="w")
         ttk.Button(self, text="Salvar", command=lambda: inserir_ensaio()).grid(row=2,column=0,columnspan=2)
 
+# variáveis globais de correção
+offset_x = 0.0
+offset_y = 0.0
+offset_z = 0.0
+
 class SensorCorrection(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
-        self.controller = controller 
+        self.controller = controller
         self.grid(sticky="nsew", padx=10, pady=10)
-        ttk.Label(self, text="Correção dos Acelerômetros", font=('Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
+        ttk.Label(self, text="Correção dos Acelerômetros", font=( 'Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
         self.cx = tk.DoubleVar(); self.cy = tk.DoubleVar(); self.cz = tk.DoubleVar()
-        for i, (lbl,var) in enumerate([("Canal X:",self.cx),("Canal Y:",self.cy),("Canal Z:",self.cz)],1):
+        for i,(lbl,var) in enumerate([("Canal X:",self.cx),("Canal Y:",self.cy),("Canal Z:",self.cz)],1):
             ttk.Label(self, text=lbl).grid(row=i,column=0,sticky="w")
             ttk.Entry(self, textvariable=var).grid(row=i,column=1,sticky="w")
-        ttk.Button(self, text="Aplicar", command=lambda: None).grid(row=4,column=0,columnspan=2)
+        ttk.Button(self, text="Aplicar", command=self.apply).grid(row=4,column=0,columnspan=2)
+    def apply(self):
+        global offset_x, offset_y, offset_z
+        offset_x,offset_y,offset_z = self.cx.get(), self.cy.get(), self.cz.get()
+        messagebox.showinfo("Calibração", f"Offsets aplicados:\nX={offset_x}, Y={offset_y}, Z={offset_z}")
 
 class TestSetup(ttk.Frame):
     def __init__(self, master):
@@ -206,9 +218,9 @@ class TestSetup(ttk.Frame):
         self.btn.grid(row=2,column=0,columnspan=2,pady=10)
 
 class TestRegistration(ttk.Frame):
-    def __init__(self, master, controller):
+    def __init__(self, master):
         super().__init__(master)
-        self.controller = controller 
+    
         self.grid(sticky="nsew", padx=20, pady=20)
         ttk.Label(self, text="Registro dos Dados", font=('Helvetica',12,'bold')).grid(row=0, column=0, columnspan=2, pady=(0,10))
         # Combobox de Contrato
@@ -257,21 +269,46 @@ class TestRegistration(ttk.Frame):
             messagebox.showerror("Erro BD", f"{e}")
 
 class SensorMonitor(ttk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, controller):
         super().__init__(master)
-        self.grid(sticky="nsew",padx=20,pady=20)
-        ttk.Label(self,text="Monitor de Acelerômetros",font=('Helvetica',12,'bold'))\
-            .grid(row=0,column=0,columnspan=2,pady=(0,10))
-        # entradas de aceleração
-        self.eX = ttk.Entry(self,width=10); self.eX.grid(row=1,column=1,sticky="w")
-        self.eY = ttk.Entry(self,width=10); self.eY.grid(row=2,column=1,sticky="w")
-        self.eZ = ttk.Entry(self,width=10); self.eZ.grid(row=3,column=1,sticky="w")
-        ttk.Label(self,text="X (mV/g):").grid(row=1,column=0,sticky="w")
-        ttk.Label(self,text="Y (mV/g):").grid(row=2,column=0,sticky="w")
-        ttk.Label(self,text="Z (mV/g):").grid(row=3,column=0,sticky="w")
-        self.btn = ttk.Button(self,text="Salvar",command=lambda: None)
-        self.btn.grid(row=4,column=0,columnspan=2,pady=10)
+        self.controller = controller
+        self.grid(sticky="nsew", padx=20, pady=20)
+        # Labels e entries
+        self.eX = ttk.Entry(self, width=10); self.eY = ttk.Entry(self, width=10); self.eZ = ttk.Entry(self, width=10)
+        for i,widget in enumerate([("X (m/s²):",self.eX),("Y (m/s²):",self.eY),("Z (m/s²):",self.eZ)], start=1):
+            ttk.Label(self, text=widget[0]).grid(row=i, column=0, sticky="w")
+            widget[1].grid(row=i, column=1, sticky="w")
+        self.btn = ttk.Button(self, text="Salvar", command=self.save_reading)
+        self.btn.grid(row=4, column=0, columnspan=2, pady=10)
+        # inicia leitura serial
+        threading.Thread(target=self.read_serial, daemon=True).start()
+    def read_serial(self):
+        global ser, offset_x, offset_y, offset_z
+        while True:
+            if ser and ser.in_waiting:
+                line = ser.readline().decode('ascii',errors='ignore').strip()
+                parts = line.split(',')
+                if len(parts)==3:
+                    try:
+                        x,y,z = map(float, parts)
+                        x-=offset_x; y-=offset_y; z-=offset_z
+                        # atualiza GUI
+                        self.eX.after(0, lambda v=x: self.eX.delete(0,'end') or self.eX.insert(0,f"{v:.3f}"))
+                        self.eY.after(0, lambda v=y: self.eY.delete(0,'end') or self.eY.insert(0,f"{v:.3f}"))
+                        self.eZ.after(0, lambda v=z: self.eZ.delete(0,'end') or self.eZ.insert(0,f"{v:.3f}"))
+                    except: pass
+            else:
+                threading.Event().wait(0.05)
+    def save_reading(self):
+        try:
+            x,y,z = float(self.eX.get()), float(self.eY.get()), float(self.eZ.get())
+        except ValueError:
+            messagebox.showerror("Erro","Leitura inválida")
+            return
+        inserir_acelerometro(x,y,z, self.controller.ensaio_id)
+        messagebox.showinfo("Salvo","Leitura salva no banco.")
 
+        
 class AboutFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -367,7 +404,6 @@ class ContratoFrame(ttk.Frame):
             messagebox.showerror("Erro","Valores numéricos inválidos")
 
 
-
 class RelatorioFrame(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
@@ -400,10 +436,6 @@ class SaidaDigitalFrame(ttk.Frame):
 
 
 
-# ============================
-# Wizard de “Novo Ensaio”
-# ============================
-
 class NovoEnsaioWizard(tk.Toplevel):
     def __init__(self, master):
         super().__init__(master)
@@ -421,20 +453,23 @@ class NovoEnsaioWizard(tk.Toplevel):
         self.show_step()
 
     def show_step(self):
-        # destrói frame anterior
+    
         for w in self.container.winfo_children(): w.destroy()
         cls = self.steps[self.index]
-        frame = cls(self.container)
-        # reconfigurar o botão "Salvar" de cada step
-        if isinstance(frame, TestRegistration):
-            frame.btn.config(text="Próximo", command=self.save_registration)
-        elif isinstance(frame, TestSetup):
-            frame.btn.config(text="Próximo", command=self.save_setup)
-        elif isinstance(frame, SensorMonitor):
-            frame.btn.config(text="Próximo", command=self.save_sensor)
-        elif isinstance(frame, RelatorioFrame):
-            frame.btn.config(text="Finalizar", command=self.save_report)
-
+        # instancia com ou sem controller
+        if cls is SensorMonitor:
+            frame = cls(self.container, self)
+        else:
+            frame = cls(self.container)
+        # configura botão
+        if isinstance(frame, TestRegistration): frame.btn.config(text="Próximo", command=self.save_registration)
+        elif isinstance(frame, TestSetup): frame.btn.config(text="Próximo", command=self.save_setup)
+        elif isinstance(frame, SensorMonitor): frame.btn.config(text="Próximo", command=self.save_sensor)
+        elif isinstance(frame, RelatorioFrame): frame.btn.config(text="Finalizar", command=self.save_report)
+            
+            
+            
+        
     def save_registration(self):
         frm = self.container.winfo_children()[0]
         # validação: nenhum campo pode ficar vazio
@@ -488,9 +523,6 @@ class NovoEnsaioWizard(tk.Toplevel):
 
 
 
-# =================================
-# Nova Frame: Ensaios Concluídos
-# =================================
 
 class EnsaiosConcluidosFrame(ttk.Frame):
     def __init__(self, parent, controller):
@@ -498,7 +530,7 @@ class EnsaiosConcluidosFrame(ttk.Frame):
         self.controller = controller 
         self.grid(sticky="nsew", padx=10, pady=10)
         ttk.Label(self, text="Ensaios Concluídos", font=('Helvetica',14,'bold')).pack(anchor="w")
-        # Treeview
+   
         cols = ("ID","Amostra","Proced.","Empresa","Capacete","Data")
         self.tv = ttk.Treeview(self, columns=cols, show="headings")
         for c in cols:
@@ -506,7 +538,7 @@ class EnsaiosConcluidosFrame(ttk.Frame):
             self.tv.column(c,width=100)
         self.tv.pack(expand=True, fill="both")
         self.tv.bind("<<TreeviewSelect>>", self.on_select)
-        # detalhe
+       
         self.txt = tk.Text(self, height=8)
         self.txt.pack(expand=True, fill="x", pady=10)
         self.carregar_ensaio()
@@ -573,6 +605,7 @@ class EnsaiosConcluidosFrame(ttk.Frame):
 class MainApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        start_serial()
         self.title("Software de Ensaio de Capacete")
         self.geometry("900x650")
         self.configure(bg="#f0f0f0")
@@ -614,5 +647,16 @@ class MainApp(tk.Tk):
         frame.grid(sticky="nsew")
 
 if __name__ == "__main__":
+    
+    def start_serial():
+     global ser
+    try:
+        ser = serial.Serial(ARDUINO_PORT, ARDUINO_BAUD, timeout=1)
+    except Exception as e:
+        print("Não foi possível abrir Serial:", e)
+
+    threading.Thread(target=start_serial, daemon=True).start()
+    
+    
     app = MainApp()
     app.mainloop()
