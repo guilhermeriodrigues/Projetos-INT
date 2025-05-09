@@ -6,6 +6,30 @@ from mysql.connector import Error
 from datetime import datetime
 import serial 
 import threading
+import random
+import time
+import sys
+
+if sys.platform.startswith("linux"):
+    import smbus2
+    RealSMBus = smbus2.SMBus
+else:
+    # FakeSMBus para Windows
+    class FakeSMBus:
+        def _init_(self, bus): pass
+        def read_i2c_block_data(self, addr, reg, length):
+            # gera 3 eixos aleatórios
+            import random
+            # simula raw: valores entre -2048 e +2047 (14‑bit >>2)
+            def sim(): return random.randint(-2048,2047)
+            # retorna como 6 bytes MSB/LSB
+            def to_bytes(v):
+                raw = (v & 0x3FFF) << 2
+                return [(raw>>8)&0xFF, raw&0xFF]
+            b = to_bytes(sim()) + to_bytes(sim()) + to_bytes(sim())
+            return b
+
+    RealSMBus = FakeSMBus
 
 
 ARDUINO_PORT = "COM3"      
@@ -157,7 +181,52 @@ def inserir_capacete(modelo, fabricante, tamanho):
         messagebox.showerror("Erro BD", f"{e}")
 
 
+class FakeRaspberry:
+    """
+    Simula um sensor acelerômetro rodando no Raspberry Pi.
+    Gera leituras periódicas dos eixos X, Y, Z.
+    """
+    def _init_(self, interval=0.05):
+        self.interval = interval
+        self.offset_x = 0.0
+        self.offset_y = 0.0
+        self.offset_z = 0.0
+        self.running = False
+        self._callbacks = []
 
+    def start(self):
+        """Inicia a thread que gera leituras fake."""
+        if not self.running:
+            self.running = True
+            threading.Thread(target=self._run, daemon=True).start()
+
+    def stop(self):
+        """Para a geração de leituras."""
+        self.running = False
+
+    def _run(self):
+        while self.running:
+            # Gera valores pseudo‑randômicos para simular o sensor
+            x = random.uniform(-2.0, 2.0) + self.offset_x
+            y = random.uniform(-2.0, 2.0) + self.offset_y
+            z = random.uniform(-2.0, 2.0) + self.offset_z
+            # Notifica todos os inscritos
+            for cb in self._callbacks:
+                try:
+                    cb(x, y, z)
+                except:
+                    pass
+            time.sleep(self.interval)
+
+    def register_callback(self, callback):
+        """Registra uma função callback(x,y,z) para receber leituras."""
+        self._callbacks.append(callback)
+
+    def apply_offsets(self, ox, oy, oz):
+        """Atualiza os offsets de calibração."""
+        self.offset_x = ox
+        self.offset_y = oy
+        self.offset_z = oz
 
 
 class ElevatorAdjustment(ttk.Frame):
@@ -269,44 +338,89 @@ class TestRegistration(ttk.Frame):
             messagebox.showerror("Erro BD", f"{e}")
 
 class SensorMonitor(ttk.Frame):
-    def __init__(self, master, controller):
-        super().__init__(master)
+    def _init_(self, master, controller):
+        super()._init_(master)
         self.controller = controller
         self.grid(sticky="nsew", padx=20, pady=20)
-        # Labels e entries
+
+        # Fonte de dados
+        ttk.Label(self, text="Fonte de Dados:").grid(row=0, column=0, sticky="w")
+        self.src = ttk.Combobox(self, values=["Arduino","Raspberry Pi","Fake Raspberry"], state="readonly")
+        self.src.current(0)
+        self.src.grid(row=0, column=1, sticky="ew")
+
+        # Leitura X/Y/Z
         self.eX = ttk.Entry(self, width=10); self.eY = ttk.Entry(self, width=10); self.eZ = ttk.Entry(self, width=10)
-        for i,widget in enumerate([("X (m/s²):",self.eX),("Y (m/s²):",self.eY),("Z (m/s²):",self.eZ)], start=1):
-            ttk.Label(self, text=widget[0]).grid(row=i, column=0, sticky="w")
-            widget[1].grid(row=i, column=1, sticky="w")
+        for i, (lbl, ent) in enumerate([("X (m/s²):",self.eX),("Y (m/s²):",self.eY),("Z (m/s²):",self.eZ)], start=1):
+            ttk.Label(self, text=lbl).grid(row=i, column=0, sticky="w")
+            ent.grid(row=i, column=1, sticky="w")
+
         self.btn = ttk.Button(self, text="Salvar", command=self.save_reading)
         self.btn.grid(row=4, column=0, columnspan=2, pady=10)
-        # inicia leitura serial
-        threading.Thread(target=self.read_serial, daemon=True).start()
-    def read_serial(self):
+
+        # I2C bus para Raspberry real
+        self.i2c_bus = RealSMBus(1)
+
+        # Fake Raspberry
+        self.fake = FakeRaspberry()
+        # registra callback para atualizar GUI a partir do fake
+        self.fake.register_callback(self._update_fields)
+
+        # start leitura contínua
+        self.running = True
+        threading.Thread(target=self._read_loop, daemon=True).start()
+
+    def _read_loop(self):
         global ser, offset_x, offset_y, offset_z
-        while True:
-            if ser and ser.in_waiting:
-                line = ser.readline().decode('ascii',errors='ignore').strip()
-                parts = line.split(',')
-                if len(parts)==3:
-                    try:
-                        x,y,z = map(float, parts)
-                        x-=offset_x; y-=offset_y; z-=offset_z
-                        # atualiza GUI
-                        self.eX.after(0, lambda v=x: self.eX.delete(0,'end') or self.eX.insert(0,f"{v:.3f}"))
-                        self.eY.after(0, lambda v=y: self.eY.delete(0,'end') or self.eY.insert(0,f"{v:.3f}"))
-                        self.eZ.after(0, lambda v=z: self.eZ.delete(0,'end') or self.eZ.insert(0,f"{v:.3f}"))
-                    except: pass
-            else:
-                threading.Event().wait(0.05)
+        while self.running:
+            src = self.src.get()
+
+            if src == "Arduino":
+                if ser and ser.in_waiting:
+                    line = ser.readline().decode('ascii',errors='ignore').strip()
+                    parts = line.split(',')
+                    if len(parts)==3:
+                        try:
+                            x,y,z = [float(p) for p in parts]
+                        except:
+                            continue
+                    else:
+                        continue
+                    # aplicar offsets
+                    x -= offset_x; y -= offset_y; z -= offset_z
+                    self._update_fields(x,y,z)
+
+            elif src == "Raspberry Pi":
+                try:
+                    data = self.i2c_bus.read_i2c_block_data(0x1C, 0x00, 6)
+                    x = (((data[0]<<8)|data[1]) >> 2) - offset_x
+                    y = (((data[2]<<8)|data[3]) >> 2) - offset_y
+                    z = (((data[4]<<8)|data[5]) >> 2) - offset_z
+                    self._update_fields(x,y,z)
+                except:
+                    pass
+
+            else:  # Fake Raspberry
+                # garanta que a thread fake está rodando
+                if not self.fake.running:
+                    self.fake.start()
+
+            time.sleep(0.05)
+
+    def _update_fields(self, x, y, z):
+        # é chamado tanto pelo loop serial quanto pelo fake callback
+        self.eX.after(0, lambda v=x: self.eX.delete(0,'end') or self.eX.insert(0,f"{v:.3f}"))
+        self.eY.after(0, lambda v=y: self.eY.delete(0,'end') or self.eY.insert(0,f"{v:.3f}"))
+        self.eZ.after(0, lambda v=z: self.eZ.delete(0,'end') or self.eZ.insert(0,f"{v:.3f}"))
+
     def save_reading(self):
         try:
             x,y,z = float(self.eX.get()), float(self.eY.get()), float(self.eZ.get())
         except ValueError:
             messagebox.showerror("Erro","Leitura inválida")
             return
-        inserir_acelerometro(x,y,z, self.controller.ensaio_id)
-        messagebox.showinfo("Salvo","Leitura salva no banco.")
+        inserir_acelerometro(x, y, z, self.controller.ensaio_id)
+        messagebox.showinfo("Salvo","Leitura salva no banco.")
 
         
 class AboutFrame(ttk.Frame):
