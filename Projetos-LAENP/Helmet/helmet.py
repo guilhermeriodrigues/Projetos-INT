@@ -303,7 +303,7 @@ def gerar_pdf(texto_relatorio, ensaio_id, offset_x, offset_y, offset_z, leituras
     c.drawString(50, y, f"Offsets aplicados: X={offset_x:.3f}, Y={offset_y:.3f}, Z={offset_z:.3f}")
     y -= 30
 
-    # (Opcional) incluir uma tabela simples de leituras
+    
     if leituras:
         c.drawString(50, y, "Leituras (horário — X | Y | Z):")
         y -= 20
