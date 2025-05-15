@@ -81,3 +81,17 @@ CREATE TABLE IF NOT EXISTS Relatorio (
     FOREIGN KEY (id_ensaio) REFERENCES Ensaio(id_ensaio)
 );
 
+
+CREATE TABLE IF NOT EXISTS Configuracoes (
+  id_config INT PRIMARY KEY AUTO_INCREMENT,
+  com_port    VARCHAR(10)    NOT NULL DEFAULT 'COM3',
+  baud_rate   INT            NOT NULL DEFAULT 9600,
+  i2c_addr    VARCHAR(10)    NOT NULL DEFAULT '0x1C',
+  offset_x    DOUBLE         NOT NULL DEFAULT 0,
+  offset_y    DOUBLE         NOT NULL DEFAULT 0,
+  offset_z    DOUBLE         NOT NULL DEFAULT 0
+);
+
+INSERT INTO Configuracoes (com_port, baud_rate, i2c_addr, offset_x, offset_y, offset_z)
+VALUES ('COM3', 9600, '0x1C', 0, 0, 0);
+
