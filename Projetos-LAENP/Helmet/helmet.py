@@ -303,7 +303,7 @@ def gerar_pdf(texto_relatorio, ensaio_id, offset_x, offset_y, offset_z, leituras
     c.drawString(50, y, f"Offsets aplicados: X={offset_x:.3f}, Y={offset_y:.3f}, Z={offset_z:.3f}")
     y -= 30
 
-    
+    # (Opcional) incluir uma tabela simples de leituras
     if leituras:
         c.drawString(50, y, "Leituras (horário — X | Y | Z):")
         y -= 20
@@ -497,7 +497,7 @@ class TestRegistration(ttk.Frame):
 
         # Botão "Salvar" será controlado pelo wizard
         self.btn = ttk.Button(self, text="Salvar", command=lambda: None)
-        self.btn.grid(row=3+len(self.fields), column=0, columnspan=2, pady=10)
+        self.btn.grid(row=4+len(self.fields), column=0, columnspan=2, pady=10)
 
     def _load_contratos(self):
         try:
@@ -980,7 +980,6 @@ class EnsaiosConcluidosFrame(ttk.Frame):
 class MainApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        start_serial()
         self.title("Software de Ensaio de Capacete")
         self.geometry("900x650")
         self.configure(bg="#f0f0f0")
@@ -1027,6 +1026,5 @@ class MainApp(tk.Tk):
 
 if __name__ == "__main__":
     threading.Thread(target=start_serial, daemon=True).start()
-    start_serial()
     app = MainApp()
     app.mainloop()
