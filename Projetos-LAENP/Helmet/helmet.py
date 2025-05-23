@@ -521,9 +521,11 @@ class TestRegistration(ttk.Frame):
         except Error as e:
             messagebox.showerror("Erro BD", f"{e}")
 
+import sys
+
 class SensorMonitor(ttk.Frame):
-    def _init_(self, master, controller):
-        super()._init_(master)
+    def __init__(self, master, controller):
+        super().__init__(master)
         self.controller = controller
         self.grid(sticky="nsew", padx=20, pady=20)
 
@@ -542,69 +544,92 @@ class SensorMonitor(ttk.Frame):
         self.btn = ttk.Button(self, text="Salvar", command=self.save_reading)
         self.btn.grid(row=4, column=0, columnspan=2, pady=10)
 
-        # I2C bus para Raspberry real
-        self.i2c_bus = RealSMBus(1)
+       
+        if sys.platform.startswith("linux"):
+            self.i2c_bus = smbus2.SMBus(1)
+            self._has_i2c = True
+        else:
+            self._has_i2c = False
 
         # Fake Raspberry
         self.fake = FakeRaspberry()
-        # registra callback para atualizar GUI a partir do fake
         self.fake.register_callback(self._update_fields)
 
-        # start leitura contínua
         self.running = True
         threading.Thread(target=self._read_loop, daemon=True).start()
 
     def _read_loop(self):
         global ser, offset_x, offset_y, offset_z
+
         while self.running:
             src = self.src.get()
 
             if src == "Arduino":
+                # pare o fake
+                self.fake.stop()
                 if ser and ser.in_waiting:
                     line = ser.readline().decode('ascii',errors='ignore').strip()
                     parts = line.split(',')
                     if len(parts)==3:
                         try:
-                            x,y,z = [float(p) for p in parts]
-                        except:
+                            x,y,z = map(float, parts)
+                        except ValueError:
                             continue
-                    else:
-                        continue
-                    # aplicar offsets
-                    x -= offset_x; y -= offset_y; z -= offset_z
-                    self._update_fields(x,y,z)
+                        x -= offset_x; y -= offset_y; z -= offset_z
+                        self._update_fields(x,y,z)
 
             elif src == "Raspberry Pi":
-                try:
-                    data = self.i2c_bus.read_i2c_block_data(0x1C, 0x00, 6)
-                    x = (((data[0]<<8)|data[1]) >> 2) - offset_x
-                    y = (((data[2]<<8)|data[3]) >> 2) - offset_y
-                    z = (((data[4]<<8)|data[5]) >> 2) - offset_z
-                    self._update_fields(x,y,z)
-                except:
-                    pass
+                # pare o fake
+                self.fake.stop()
+                # só tenta I2C se estivermos realmente em Linux
+                if self._has_i2c:
+                    try:
+                        data = self.i2c_bus.read_i2c_block_data(0x1C, 0x00, 6)
+                        x = (((data[0]<<8)|data[1]) >> 2) - offset_x
+                        y = (((data[2]<<8)|data[3]) >> 2) - offset_y
+                        z = (((data[4]<<8)|data[5]) >> 2) - offset_z
+                        self._update_fields(x,y,z)
+                    except Exception:
+                        # falha I2C; nada a fazer
+                        pass
+                # em Windows, simplesmente não faz nada aqui
 
             else:  # Fake Raspberry
-                # garanta que a thread fake está rodando
                 if not self.fake.running:
                     self.fake.start()
 
             time.sleep(0.05)
 
+    def destroy (self):
+        self.running = False
+        try:
+            self.fake.stop()
+        except AttributeError:
+            pass
+        super().destroy()
+
+
+    def _safe_set(self, entry, value):
+         try:
+             entry.delete(0, 'end')
+             entry.insert(0, f"{value:.3f}")
+         except tk.TclError:
+             pass
+   
     def _update_fields(self, x, y, z):
-        # é chamado tanto pelo loop serial quanto pelo fake callback
-        self.eX.after(0, lambda v=x: self.eX.delete(0,'end') or self.eX.insert(0,f"{v:.3f}"))
-        self.eY.after(0, lambda v=y: self.eY.delete(0,'end') or self.eY.insert(0,f"{v:.3f}"))
-        self.eZ.after(0, lambda v=z: self.eZ.delete(0,'end') or self.eZ.insert(0,f"{v:.3f}"))
+        self.eX.after(0, lambda v=x: self._safe_set(self.eX,v))
+        self.eY.after(0, lambda v=y: self._safe_set(self.eY, v))
+        self.eZ.after(0, lambda v=z: self._safe_set(self.eZ, v))
 
     def save_reading(self):
         try:
-            x,y,z = float(self.eX.get()), float(self.eY.get()), float(self.eZ.get())
+            x, y, z = float(self.eX.get()), float(self.eY.get()), float(self.eZ.get())
         except ValueError:
             messagebox.showerror("Erro","Leitura inválida")
             return
         inserir_acelerometro(x, y, z, self.controller.ensaio_id)
-        messagebox.showinfo("Salvo","Leitura salva no banco.")
+        messagebox.showinfo("Salvo","Leitura salva no banco.")
+
 
         
 class AboutFrame(ttk.Frame):
@@ -828,23 +853,27 @@ class NovoEnsaioWizard(tk.Toplevel):
         self.show_step()
 
     def show_step(self):
-    
-        for w in self.container.winfo_children(): w.destroy()
+        # destrói frame anterior
+        for w in self.container.winfo_children():
+            w.destroy()
+
         cls = self.steps[self.index]
-        # instancia com ou sem controller
-        if cls is SensorMonitor:
+
+        # instanciar com ou sem controller
+        if cls is SensorMonitor or cls is RelatorioFrame:
             frame = cls(self.container, self)
         else:
             frame = cls(self.container)
-        # configura botão
-        if isinstance(frame, TestRegistration): frame.btn.config(text="Próximo", command=self.save_registration)
-        elif isinstance(frame, TestSetup): frame.btn.config(text="Próximo", command=self.save_setup)
-        elif isinstance(frame, SensorMonitor): frame.btn.config(text="Próximo", command=self.save_sensor)
-        elif isinstance(frame, RelatorioFrame): frame.btn.config(text="Finalizar", command=self.save_report)
+
+        # reconfigurar o botão "Salvar" de cada step
+        if isinstance(frame, TestRegistration):
+            frame.btn.config(text="Próximo", command=self.save_registration)
+        elif isinstance(frame, TestSetup):
+            frame.btn.config(text="Próximo", command=self.save_setup)
+        elif isinstance(frame, SensorMonitor):
+            frame.btn.config(text="Próximo", command=self.save_sensor)
+     
             
-            
-            
-        
     def save_registration(self):
         frm = self.container.winfo_children()[0]
         # validação: nenhum campo pode ficar vazio
@@ -852,6 +881,12 @@ class NovoEnsaioWizard(tk.Toplevel):
             if not entry.get().strip():
                 messagebox.showerror("Erro", f"O campo “{field}” é obrigatório.")
                 return
+        
+        norma = frm.combo_norma.get().strip()
+        if not norma:
+            messagebox.showerror("Erro", "Selecione uma Norma Utilizada.")
+            return
+        
         # se chegou aqui, todos preenchidos:
         vals = {f: frm.entries[f].get().strip() for f in frm.fields}
         inserir_ensaio_impacto(
@@ -860,7 +895,7 @@ class NovoEnsaioWizard(tk.Toplevel):
             vals["Número do Procedimento/Relatório"],
             vals["Posição do Ensaio"],
             vals["Condicionamento"],
-            vals["Norma Utilizada"]
+            norma
         )
         self.index += 1
         self.show_step()
