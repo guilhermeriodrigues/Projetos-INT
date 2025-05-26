@@ -432,16 +432,31 @@ class SensorCorrection(ttk.Frame):
         super().__init__(parent)
         self.controller = controller
         self.grid(sticky="nsew", padx=10, pady=10)
-        ttk.Label(self, text="Correção dos Acelerômetros", font=( 'Helvetica',12,'bold')).grid(row=0,column=0,columnspan=2)
+
+        ttk.Label(self, text="Correção dos Acelerômetros",
+                  font=('Helvetica',12,'bold')).grid(row=0, column=0, columnspan=2)
+
         self.cx = tk.DoubleVar(); self.cy = tk.DoubleVar(); self.cz = tk.DoubleVar()
-        for i,(lbl,var) in enumerate([("Canal X:",self.cx),("Canal Y:",self.cy),("Canal Z:",self.cz)],1):
-            ttk.Label(self, text=lbl).grid(row=i,column=0,sticky="w")
-            ttk.Entry(self, textvariable=var).grid(row=i,column=1,sticky="w")
-        ttk.Button(self, text="Aplicar", command=self.apply).grid(row=4,column=0,columnspan=2)
+        for i, (lbl, var) in enumerate([("Canal X:",self.cx), ("Canal Y:",self.cy), ("Canal Z:",self.cz)], start=1):
+            ttk.Label(self, text=lbl).grid(row=i, column=0, sticky="w")
+            ttk.Entry(self, textvariable=var).grid(row=i, column=1, sticky="w")
+
+        # botão aplicar offsets
+        ttk.Button(self, text="Aplicar", command=self.apply)\
+            .grid(row=4, column=0, columnspan=2, pady=(10,5))
+
+        # botão “Próximo” — o wizard irá configurar seu texto e callback
+        self.btn = ttk.Button(self, text="Próximo")
+        self.btn.grid(row=5, column=0, columnspan=2, pady=(5,10))
+
     def apply(self):
         global offset_x, offset_y, offset_z
-        offset_x,offset_y,offset_z = self.cx.get(), self.cy.get(), self.cz.get()
-        messagebox.showinfo("Calibração", f"Offsets aplicados:\nX={offset_x}, Y={offset_y}, Z={offset_z}")
+        offset_x = self.cx.get()
+        offset_y = self.cy.get()
+        offset_z = self.cz.get()
+        messagebox.showinfo("Calibração",
+                            f"Offsets aplicados:\nX={offset_x:.3f}, Y={offset_y:.3f}, Z={offset_z:.3f}")
+
 
 class TestSetup(ttk.Frame):
     def __init__(self, master):
@@ -841,14 +856,12 @@ class NovoEnsaioWizard(tk.Toplevel):
         super().__init__(master)
         self.title("Fluxo: Novo Ensaio")
         self.geometry("600x400")
-        self.master = master  # referência ao MainApp
-        # criar um container para trocar de frame
+        self.master = master
         self.container = ttk.Frame(self)
         self.container.pack(expand=True, fill="both")
-        # iniciar ensaio no banco
         self.ensaio_id = inserir_ensaio()
-        # definir sequência de classes
-        self.steps = [TestRegistration, TestSetup, SensorMonitor, RelatorioFrame]
+        # agora SensorCorrection vem antes do SensorMonitor
+        self.steps = [TestRegistration, TestSetup, SensorMonitor, SensorCorrection, RelatorioFrame]
         self.index = 0
         self.show_step()
 
@@ -858,21 +871,24 @@ class NovoEnsaioWizard(tk.Toplevel):
             w.destroy()
 
         cls = self.steps[self.index]
-
-        # instanciar com ou sem controller
-        if cls is SensorMonitor or cls is RelatorioFrame:
+        # passa controller para os que precisam
+        if cls in (SensorCorrection, SensorMonitor, RelatorioFrame):
             frame = cls(self.container, self)
         else:
             frame = cls(self.container)
 
-        # reconfigurar o botão "Salvar" de cada step
+        # configura o botão “btn” de cada etapa
         if isinstance(frame, TestRegistration):
             frame.btn.config(text="Próximo", command=self.save_registration)
         elif isinstance(frame, TestSetup):
             frame.btn.config(text="Próximo", command=self.save_setup)
+        elif isinstance(frame, SensorCorrection):
+            frame.btn.config(text="Próximo", command=self.save_correction)
         elif isinstance(frame, SensorMonitor):
             frame.btn.config(text="Próximo", command=self.save_sensor)
-     
+        # RelatorioFrame já tem seus próprios botões
+
+        frame.grid(sticky="nsew")
             
     def save_registration(self):
         frm = self.container.winfo_children()[0]
@@ -905,6 +921,12 @@ class NovoEnsaioWizard(tk.Toplevel):
         self.index += 1
         self.show_step()
 
+    def save_correction(self):
+        # aqui você já aplicou offsets via SensorCorrection.apply()
+        self.index += 1
+        self.show_step()
+
+        
     def save_sensor(self):
         frm = self.container.winfo_children()[0]
         try:
@@ -930,7 +952,6 @@ class NovoEnsaioWizard(tk.Toplevel):
         inserir_relatorio(idx, texto)
         messagebox.showinfo("Concluído","Ensaio finalizado com sucesso!")
         self.destroy()
-
 
 
 
